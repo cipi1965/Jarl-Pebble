@@ -1,0 +1,318 @@
+{
+  "name": "jarl",
+  "author": "Jose Fos & Matteo Piccina",
+  "version": "2.6.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {
+    "@rebble/clay": "^1.0.8"
+  },
+  "pebble": {
+    "displayName": "Jarl",
+    "uuid": "59b70b64-1ab0-4e41-89dd-3cc5b0845f99",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "flint",
+      "emery"
+    ],
+    "capabilities": [
+      "location",
+      "configurable"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "messageKeys": [
+      "AnimateNumbers",
+      "VibrateOnConnect",
+      "VibrateOnDisconnect",
+      "Conditions",
+      "Temperature",
+      "TempUnits",
+      "Color1",
+      "Color2",
+      "Color3",
+      "Color4"
+    ],
+    "resources": {
+      "media": [
+        {
+          "file": "images/icon_menu.png",
+          "menuIcon": true,
+          "name": "ICON_MENU",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/wednesday.png",
+          "name": "IMAGE_WEDNESDAY",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/sunday.png",
+          "name": "IMAGE_SUNDAY",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/snow.png",
+          "name": "IMAGE_W_SNOW",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/saturday.png",
+          "name": "IMAGE_SATURDAY",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/rain.png",
+          "name": "IMAGE_W_RAIN",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/partly-cloudy-night.png",
+          "name": "IMAGE_W_PARTLY_CLOUDY_NIGHT",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/partly-cloudy-day.png",
+          "name": "IMAGE_W_PARTLY_CLOUDY",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/monday.png",
+          "name": "IMAGE_MONDAY",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/friday.png",
+          "name": "IMAGE_FRIDAY",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/fog.png",
+          "name": "IMAGE_W_FOG",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/f_mini.png",
+          "name": "IMAGE_F_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/drizzle.png",
+          "name": "IMAGE_W_DRIZZLE",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/c_mini.png",
+          "name": "IMAGE_C_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/cloudy.png",
+          "name": "IMAGE_W_CLOUDY",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_60.png",
+          "name": "IMAGE_BATTERY_60",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_50.png",
+          "name": "IMAGE_BATTERY_50",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_40.png",
+          "name": "IMAGE_BATTERY_40",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/tuesday.png",
+          "name": "IMAGE_TUESDAY",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/thursday.png",
+          "name": "IMAGE_THURSDAY",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/thunder.png",
+          "name": "IMAGE_W_THUNDER",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_30.png",
+          "name": "IMAGE_BATTERY_30",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_20.png",
+          "name": "IMAGE_BATTERY_20",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_10.png",
+          "name": "IMAGE_BATTERY_10",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_100.png",
+          "name": "IMAGE_BATTERY_100",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/9_mini.png",
+          "name": "IMAGE_9_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/minus_mini.png",
+          "name": "IMAGE_MINUS_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/8_mini.png",
+          "name": "IMAGE_8_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/7_mini.png",
+          "name": "IMAGE_7_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/plus_mini.png",
+          "name": "IMAGE_PLUS_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/loading1.png",
+          "name": "IMAGE_W_LOADING",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/Dithered Image.png",
+          "name": "IMAGE_TROLL",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/clear-night.png",
+          "name": "IMAGE_W_CLEAR_NIGHT",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/clear-day.png",
+          "name": "IMAGE_W_CLEAR",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_90.png",
+          "name": "IMAGE_BATTERY_90",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_80.png",
+          "name": "IMAGE_BATTERY_80",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/battery_70.png",
+          "name": "IMAGE_BATTERY_70",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/6_mini.png",
+          "name": "IMAGE_6_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/5_mini.png",
+          "name": "IMAGE_5_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/4_mini.png",
+          "name": "IMAGE_4_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/3_mini.png",
+          "name": "IMAGE_3_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/2_mini.png",
+          "name": "IMAGE_2_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/1_mini.png",
+          "name": "IMAGE_1_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/0_mini.png",
+          "name": "IMAGE_0_MINI",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/9.png",
+          "name": "NUMBER_9",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/8.png",
+          "name": "NUMBER_8",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/7.png",
+          "name": "NUMBER_7",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/6.png",
+          "name": "NUMBER_6",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/5.png",
+          "name": "NUMBER_5",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/4.png",
+          "name": "NUMBER_4",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/3.png",
+          "name": "NUMBER_3",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/2.png",
+          "name": "NUMBER_2",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/1.png",
+          "name": "NUMBER_1",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/0.png",
+          "name": "NUMBER_0",
+          "type": "bitmap"
+        }
+      ]
+    }
+  }
+}
