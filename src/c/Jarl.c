@@ -296,24 +296,27 @@ static void update_time()
 
 void timer_callback(void *data)
 {
-  // animar temperatura
-  animate_layer(bitmap_layer_get_layer(layer_temp_sign), &GRect(3, ANIM_LENGTH - VER_OFFSET + 12, 13, 17), &GRect(3, -VER_OFFSET + 12, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(bitmap_layer_get_layer(layer_temp_dec), &GRect(18, ANIM_LENGTH - VER_OFFSET + 12, 13, 17), &GRect(18, -VER_OFFSET + 12, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(bitmap_layer_get_layer(layer_temp_unit), &GRect(33, ANIM_LENGTH - VER_OFFSET + 12, 13, 17), &GRect(33, -VER_OFFSET + 12, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(bitmap_layer_get_layer(layer_temp_degrees), &GRect(48, ANIM_LENGTH - VER_OFFSET + 12, 21, 17), &GRect(48, -VER_OFFSET + 12, 21, 17), ANIM_DURATION_UP, ANIM_DELAY);
+  // animate temperature
+  int first_temp_symbol_x = ((WIDTH / 2) - 39 - 21 - 6) / 2;
+  animate_layer(bitmap_layer_get_layer(layer_temp_sign), &GRect(first_temp_symbol_x, ANIM_LENGTH - VER_OFFSET + 12, 13, 17), &GRect(first_temp_symbol_x, -VER_OFFSET + 12, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(bitmap_layer_get_layer(layer_temp_dec), &GRect(first_temp_symbol_x + 13 + 2, 12, 13, 17), &GRect(first_temp_symbol_x + 13 + 2, -VER_OFFSET + 12, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(bitmap_layer_get_layer(layer_temp_unit), &GRect(first_temp_symbol_x + 26 + 4, 12, 13, 17), &GRect(first_temp_symbol_x + 26 + 4, -VER_OFFSET + 12, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(bitmap_layer_get_layer(layer_temp_degrees), &GRect(first_temp_symbol_x + 39 + 6, 12, 21, 17), &GRect(first_temp_symbol_x + 39 + 6, -VER_OFFSET + 12, 21, 17), ANIM_DURATION_UP, ANIM_DELAY);
 
-  // animar date
-  animate_layer(bitmap_layer_get_layer(layer_date_day), &GRect(25, ANIM_LENGTH + 6 - 42, 43, 17), &GRect(25, 6 - 42, 43, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(bitmap_layer_get_layer(layer_date_dec), &GRect(91, ANIM_LENGTH + 6 - 42, 13, 17), &GRect(91, 6 - 42, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(bitmap_layer_get_layer(layer_date_unit), &GRect(105, ANIM_LENGTH + 6 - 42, 13, 17), &GRect(105, 6 - 42, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
+  // animate date
+  int date_day_x = (WIDTH / 2 - 43) / 2;
+  animate_layer(bitmap_layer_get_layer(layer_date_day), &GRect(date_day_x, ANIM_LENGTH + 6 - 42, 43, 17), &GRect(date_day_x, 6 - 42, 43, 17), ANIM_DURATION_UP, ANIM_DELAY);
+  int first_day_number_x = (WIDTH / 2) + ((WIDTH / 2) - 26) / 2;
+  animate_layer(bitmap_layer_get_layer(layer_date_dec), &GRect(first_day_number_x, ANIM_LENGTH + 6 - 42, 13, 17), &GRect(first_day_number_x, 6 - 42, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(bitmap_layer_get_layer(layer_date_unit), &GRect(first_day_number_x + 13 + 1, ANIM_LENGTH + 6 - 42, 13, 17), &GRect(first_day_number_x + 13 + 1, 6 - 42, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
 
-  // animar bateria
-  animate_layer(bitmap_layer_get_layer(battery_layer), &GRect(0, -10 + ANIM_LENGTH, 144, 6), &GRect(0, -10, 144, 6), ANIM_DURATION_UP, ANIM_DELAY);
+  // animate battery
+  animate_layer(bitmap_layer_get_layer(battery_layer), &GRect((WIDTH - 144) / 2, -10 + ANIM_LENGTH, 144, 6), &GRect((WIDTH - 144) / 2, -10, 144, 6), ANIM_DURATION_UP, ANIM_DELAY);
 
-  // animar conditions
-  animate_layer(bitmap_layer_get_layer(conditions_layer), &GRect(HOR_OFFSET, ANIM_LENGTH - VER_OFFSET, HOR_OFFSET, 42), &GRect(HOR_OFFSET, -VER_OFFSET, HOR_OFFSET, 42), ANIM_DURATION_UP, ANIM_DELAY);
+  // animate conditions
+  animate_layer(bitmap_layer_get_layer(conditions_layer), &GRect(HOR_OFFSET, 0, HOR_OFFSET, 42), &GRect(HOR_OFFSET, -VER_OFFSET, HOR_OFFSET, 42), ANIM_DURATION_UP, ANIM_DELAY);
 
-  // animar números
+  // animate time
   animate_layer(bitmap_layer_get_layer(hours_dec.layer), &GRect(X_ORIGIN, ANIM_LENGTH, HOR_OFFSET, VER_OFFSET), &GRect(X_ORIGIN, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_UP, ANIM_DELAY);
   animate_layer(bitmap_layer_get_layer(hours_unit.layer), &GRect(HOR_OFFSET, ANIM_LENGTH, HOR_OFFSET, VER_OFFSET), &GRect(HOR_OFFSET, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_UP, ANIM_DELAY);
   animate_layer(bitmap_layer_get_layer(minutes_dec.layer), &GRect(X_ORIGIN, VER_OFFSET + ANIM_LENGTH, HOR_OFFSET, VER_OFFSET), &GRect(X_ORIGIN, VER_OFFSET, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_UP, ANIM_DELAY);
@@ -335,24 +338,72 @@ static void accel_tap_handler(AccelAxisType axis, int32_t direction)
   {
     on_animation = true;
 
-    // animar temperatura
-    animate_layer(bitmap_layer_get_layer(layer_temp_sign), &GRect(3, -VER_OFFSET + 12, 13, 17), &GRect(3, ANIM_LENGTH - VER_OFFSET + 12, 13, 17), ANIM_DURATION_DOWN, ANIM_DELAY);
-    animate_layer(bitmap_layer_get_layer(layer_temp_dec), &GRect(18, -VER_OFFSET + 12, 13, 17), &GRect(18, ANIM_LENGTH - VER_OFFSET + 12, 13, 17), ANIM_DURATION_DOWN, ANIM_DELAY);
-    animate_layer(bitmap_layer_get_layer(layer_temp_unit), &GRect(33, -VER_OFFSET + 12, 13, 17), &GRect(33, ANIM_LENGTH - VER_OFFSET + 12, 13, 17), ANIM_DURATION_DOWN, ANIM_DELAY);
-    animate_layer(bitmap_layer_get_layer(layer_temp_degrees), &GRect(48, -VER_OFFSET + 12, 21, 17), &GRect(48, ANIM_LENGTH - VER_OFFSET + 12, 21, 17), ANIM_DURATION_DOWN, ANIM_DELAY);
+    // animate temperature
+    int first_temp_symbol_x = ((WIDTH / 2) - 39 - 21 - 6) / 2;
+    animate_layer(
+      bitmap_layer_get_layer(layer_temp_sign),
+      &GRect(first_temp_symbol_x, -VER_OFFSET + 12, 13, 17),
+      &GRect(first_temp_symbol_x, 12, 13, 17),
+      ANIM_DURATION_DOWN, ANIM_DELAY
+    );
+    animate_layer(
+      bitmap_layer_get_layer(layer_temp_dec),
+      &GRect(first_temp_symbol_x + 13 + 2, -VER_OFFSET + 12, 13, 17),
+      &GRect(first_temp_symbol_x + 13 + 2, 12, 13, 17),
+      ANIM_DURATION_DOWN, ANIM_DELAY
+    );
+    animate_layer(
+      bitmap_layer_get_layer(layer_temp_unit),
+      &GRect(first_temp_symbol_x + 26 + 4, -VER_OFFSET + 12, 13, 17),
+      &GRect(first_temp_symbol_x + 26 + 4, 12, 13, 17),
+      ANIM_DURATION_DOWN, ANIM_DELAY
+    );
+    animate_layer(
+      bitmap_layer_get_layer(layer_temp_degrees),
+      &GRect(first_temp_symbol_x + 39 + 6, -ANIM_LENGTH + 12, 21, 17),
+      &GRect(first_temp_symbol_x + 39 + 6, 12, 21, 17),
+      ANIM_DURATION_DOWN, ANIM_DELAY
+    );
 
-    // animar date
-    animate_layer(bitmap_layer_get_layer(layer_date_day), &GRect(25, 6 - 42, 43, 17), &GRect(25, ANIM_LENGTH + 6 - 42, 43, 17), ANIM_DURATION_DOWN, ANIM_DELAY);
-    animate_layer(bitmap_layer_get_layer(layer_date_dec), &GRect(91, 6 - 42, 13, 17), &GRect(91, ANIM_LENGTH + 6 - 42, 13, 17), ANIM_DURATION_DOWN, ANIM_DELAY);
-    animate_layer(bitmap_layer_get_layer(layer_date_unit), &GRect(105, 6 - 42, 13, 17), &GRect(105, ANIM_LENGTH + 6 - 42, 13, 17), ANIM_DURATION_DOWN, ANIM_DELAY);
+    // animate date
+    int date_day_x = (WIDTH / 2 - 43) / 2;
+    animate_layer(
+      bitmap_layer_get_layer(layer_date_day),
+      &GRect(date_day_x, 6 - 42, 43, 17),
+      &GRect(date_day_x, ANIM_LENGTH + 6 - 42, 43, 17),
+      ANIM_DURATION_DOWN, ANIM_DELAY
+    );
+    int first_day_number_x = (WIDTH / 2) + ((WIDTH / 2) - 26) / 2;
+    animate_layer(
+      bitmap_layer_get_layer(layer_date_dec),
+      &GRect(first_day_number_x, 6 - 42, 13, 17),
+      &GRect(first_day_number_x, ANIM_LENGTH + 6 - 42, 13, 17),
+      ANIM_DURATION_DOWN, ANIM_DELAY
+    );
+    animate_layer(
+      bitmap_layer_get_layer(layer_date_unit),
+      &GRect(first_day_number_x + 13 + 1, 6 - 42, 13, 17),
+      &GRect(first_day_number_x + 13 + 1, ANIM_LENGTH + 6 - 42, 13, 17),
+      ANIM_DURATION_DOWN, ANIM_DELAY
+    );
 
-    // animar bateria
-    animate_layer(bitmap_layer_get_layer(battery_layer), &GRect(0, -10, 144, 6), &GRect(0, -10 + ANIM_LENGTH, 144, 6), ANIM_DURATION_DOWN, ANIM_DELAY);
+    // animate battery
+    animate_layer(
+      bitmap_layer_get_layer(battery_layer),
+      &GRect((WIDTH - 144) / 2, -10, 144, 6),
+      &GRect((WIDTH - 144) / 2, -10 + ANIM_LENGTH, 144, 6),
+      ANIM_DURATION_DOWN, ANIM_DELAY
+    );
 
-    // animar condiciones
-    animate_layer(bitmap_layer_get_layer(conditions_layer), &GRect(HOR_OFFSET, -VER_OFFSET, HOR_OFFSET, 42), &GRect(HOR_OFFSET, ANIM_LENGTH - VER_OFFSET, HOR_OFFSET, 42), ANIM_DURATION_DOWN, ANIM_DELAY);
+    // animate weather conditions
+    animate_layer(
+      bitmap_layer_get_layer(conditions_layer),
+      &GRect(HOR_OFFSET, -VER_OFFSET, HOR_OFFSET, 42),
+      &GRect(HOR_OFFSET, 0, HOR_OFFSET, 42),
+      ANIM_DURATION_DOWN, ANIM_DELAY
+    );
 
-    // animar números
+    // animate time
     animate_layer(bitmap_layer_get_layer(hours_dec.layer), &GRect(X_ORIGIN, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), &GRect(X_ORIGIN, ANIM_LENGTH, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DOWN, ANIM_DELAY);
     animate_layer(bitmap_layer_get_layer(hours_unit.layer), &GRect(HOR_OFFSET, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), &GRect(HOR_OFFSET, ANIM_LENGTH, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DOWN, ANIM_DELAY);
     animate_layer(bitmap_layer_get_layer(minutes_dec.layer), &GRect(X_ORIGIN, VER_OFFSET, HOR_OFFSET, VER_OFFSET), &GRect(X_ORIGIN, VER_OFFSET + ANIM_LENGTH, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DOWN, ANIM_DELAY);
