@@ -48,6 +48,7 @@ module.exports = [
   },
   {
     "type": "section",
+    "capabilities" : ["COLOR"],
     "items": [
       {
         "type": "heading",
