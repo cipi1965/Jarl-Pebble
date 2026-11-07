@@ -289,6 +289,9 @@ static void update_time()
 
   int h1 = buffer[0] - '0';
   update_time_component(&hours_dec, buffer[0], h1);
+  // 12h mode: no leading zero ("9:41", not "09:41")
+  layer_set_hidden(bitmap_layer_get_layer(hours_dec.layer),
+                   !clock_is_24h_style() && buffer[0] == '0');
 
   int h0 = buffer[1] - '0';
   update_time_component(&hours_unit, buffer[1], h0);
