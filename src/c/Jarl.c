@@ -225,12 +225,17 @@ static void update_battery()
   bitmap_layer_set_bitmap(battery_layer, battery_bitmap);
 }
 
-// void update_temp(void *data) {
 void update_temp()
 {
-  //  vibes_short_pulse();
   DictionaryIterator *iter;
-  app_message_outbox_begin(&iter);
+  // Fails when the phone is disconnected or a send is in flight; iter is
+  // then not valid, so don't write to it.
+  AppMessageResult result = app_message_outbox_begin(&iter);
+  if (result != APP_MSG_OK)
+  {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "Weather request skipped: %d", (int)result);
+    return;
+  }
   // Add a key-value pair
   dict_write_uint8(iter, 0, 0);
   // Send the message!
