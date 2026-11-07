@@ -3,7 +3,7 @@
 
 #ifdef PBL_COLOR
 
-#define SHOW_APP_LOGS
+// #define SHOW_APP_LOGS  // debug only: logs on every digit recolor
 
 char* get_gbitmapformat_text(GBitmapFormat format){
 	switch (format) {
