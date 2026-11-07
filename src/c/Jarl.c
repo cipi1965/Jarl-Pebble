@@ -77,13 +77,30 @@ const int WEATHER_IDS[10] = {
 static Window *s_main_window;
 
 // Info panel text, drawn with the Jarl Mini pixel font (13x17 glyphs, 2 px gap)
+// Pebble Time 2 (200x228) gets the larger 18x24 variant.
+#if PBL_DISPLAY_WIDTH >= 200
+#define MINI_FONT RESOURCE_ID_FONT_JARL_MINI_BIG_24
+#define MINI_GW 18   /* glyph width */
+#define MINI_H 24    /* glyph height */
+#define MINI_GAP 3   /* space after each glyph */
+#define MINI_DEG_W 8 /* degree sign width */
+#define DATE_Y 46    /* centred between weather icon and battery bar */
+#else
+#define MINI_FONT RESOURCE_ID_FONT_JARL_MINI_17
+#define MINI_GW 13
 #define MINI_H 17
-#define TEMP_X (((WIDTH / 2) - 39 - 21 - 6) / 2)
-#define TEMP_W 68 /* "+21°C" incl. the 2 px gap after the last glyph */
-#define DAY_X ((WIDTH / 2 - 43) / 2)
-#define DAY_W 45 /* "MON" + gap */
-#define DAYNUM_X ((WIDTH / 2) + ((WIDTH / 2) - 28) / 2)
-#define DAYNUM_W 30 /* "07" + gap */
+#define MINI_GAP 2
+#define MINI_DEG_W 6
+#define DATE_Y 48
+#endif
+// Layer widths include the gap after the last glyph, or TextLayer drops it.
+#define TEMP_W (4 * MINI_GW + MINI_DEG_W + 5 * MINI_GAP) /* "+21°C" */
+#define TEMP_X (((WIDTH / 2) - (TEMP_W - MINI_GAP)) / 2)
+#define TEMP_Y ((42 - MINI_H) / 2) /* centred on the 42 px weather icon */
+#define DAY_W (3 * (MINI_GW + MINI_GAP)) /* "MON" */
+#define DAY_X (((WIDTH / 2) - (DAY_W - MINI_GAP)) / 2)
+#define DAYNUM_W (2 * (MINI_GW + MINI_GAP)) /* "07" */
+#define DAYNUM_X ((WIDTH / 2) + ((WIDTH / 2) - (2 * MINI_GW + MINI_GAP)) / 2)
 static GFont mini_font;
 static TextLayer *temp_layer, *day_layer, *daynum_layer;
 static char temp_text[10] = "----";
@@ -299,11 +316,11 @@ static void update_time()
 void timer_callback(void *data)
 {
   // animate temperature
-  animate_layer(text_layer_get_layer(temp_layer), &GRect(TEMP_X, ANIM_LENGTH - VER_OFFSET + 12, TEMP_W, MINI_H), &GRect(TEMP_X, -VER_OFFSET + 12, TEMP_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(text_layer_get_layer(temp_layer), &GRect(TEMP_X, TEMP_Y, TEMP_W, MINI_H), &GRect(TEMP_X, TEMP_Y - VER_OFFSET, TEMP_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
 
   // animate date
-  animate_layer(text_layer_get_layer(day_layer), &GRect(DAY_X, ANIM_LENGTH + 6 - 42, DAY_W, MINI_H), &GRect(DAY_X, 6 - 42, DAY_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(text_layer_get_layer(daynum_layer), &GRect(DAYNUM_X, ANIM_LENGTH + 6 - 42, DAYNUM_W, MINI_H), &GRect(DAYNUM_X, 6 - 42, DAYNUM_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(text_layer_get_layer(day_layer), &GRect(DAY_X, DATE_Y, DAY_W, MINI_H), &GRect(DAY_X, DATE_Y - ANIM_LENGTH, DAY_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(text_layer_get_layer(daynum_layer), &GRect(DAYNUM_X, DATE_Y, DAYNUM_W, MINI_H), &GRect(DAYNUM_X, DATE_Y - ANIM_LENGTH, DAYNUM_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
 
   // animate battery
   animate_layer(bitmap_layer_get_layer(battery_layer), &GRect((WIDTH - 144) / 2, -10 + ANIM_LENGTH, 144, 6), &GRect((WIDTH - 144) / 2, -10, 144, 6), ANIM_DURATION_UP, ANIM_DELAY);
@@ -336,22 +353,22 @@ static void accel_tap_handler(AccelAxisType axis, int32_t direction)
     // animate temperature
     animate_layer(
       text_layer_get_layer(temp_layer),
-      &GRect(TEMP_X, -VER_OFFSET + 12, TEMP_W, MINI_H),
-      &GRect(TEMP_X, 12, TEMP_W, MINI_H),
+      &GRect(TEMP_X, TEMP_Y - VER_OFFSET, TEMP_W, MINI_H),
+      &GRect(TEMP_X, TEMP_Y, TEMP_W, MINI_H),
       ANIM_DURATION_DOWN, ANIM_DELAY
     );
 
     // animate date
     animate_layer(
       text_layer_get_layer(day_layer),
-      &GRect(DAY_X, 6 - 42, DAY_W, MINI_H),
-      &GRect(DAY_X, ANIM_LENGTH + 6 - 42, DAY_W, MINI_H),
+      &GRect(DAY_X, DATE_Y - ANIM_LENGTH, DAY_W, MINI_H),
+      &GRect(DAY_X, DATE_Y, DAY_W, MINI_H),
       ANIM_DURATION_DOWN, ANIM_DELAY
     );
     animate_layer(
       text_layer_get_layer(daynum_layer),
-      &GRect(DAYNUM_X, 6 - 42, DAYNUM_W, MINI_H),
-      &GRect(DAYNUM_X, ANIM_LENGTH + 6 - 42, DAYNUM_W, MINI_H),
+      &GRect(DAYNUM_X, DATE_Y - ANIM_LENGTH, DAYNUM_W, MINI_H),
+      &GRect(DAYNUM_X, DATE_Y, DAYNUM_W, MINI_H),
       ANIM_DURATION_DOWN, ANIM_DELAY
     );
 
@@ -420,11 +437,11 @@ static void main_window_load(Window *window)
   layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(minutes_unit.layer));
 
   // Info panel text (hidden above the screen until the panel slides in)
-  mini_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_JARL_MINI_17));
-  temp_layer = make_mini_text_layer(window, GRect(TEMP_X, -VER_OFFSET + 12, TEMP_W, MINI_H));
+  mini_font = fonts_load_custom_font(resource_get_handle(MINI_FONT));
+  temp_layer = make_mini_text_layer(window, GRect(TEMP_X, TEMP_Y - VER_OFFSET, TEMP_W, MINI_H));
   text_layer_set_text(temp_layer, temp_text);
-  day_layer = make_mini_text_layer(window, GRect(DAY_X, 6 - 42, DAY_W, MINI_H));
-  daynum_layer = make_mini_text_layer(window, GRect(DAYNUM_X, 6 - 42, DAYNUM_W, MINI_H));
+  day_layer = make_mini_text_layer(window, GRect(DAY_X, DATE_Y - ANIM_LENGTH, DAY_W, MINI_H));
+  daynum_layer = make_mini_text_layer(window, GRect(DAYNUM_X, DATE_Y - ANIM_LENGTH, DAYNUM_W, MINI_H));
 
   // create battery layers
   battery_layer = bitmap_layer_create(GRect(0, -10, 144, 6));

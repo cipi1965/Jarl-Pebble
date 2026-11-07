@@ -206,7 +206,20 @@
         {
           "type": "font",
           "name": "FONT_JARL_MINI_17",
-          "file": "fonts/jarl_mini.ttf"
+          "file": "fonts/jarl_mini.ttf",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_JARL_MINI_BIG_24",
+          "file": "fonts/jarl_mini_big.ttf",
+          "targetPlatforms": [
+            "emery"
+          ]
         }
       ]
     },
