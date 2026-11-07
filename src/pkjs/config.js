@@ -33,6 +33,17 @@ module.exports = [
         ]
       },
       {
+        "type": "select",
+        "messageKey": "WeatherInterval",
+        "label": "Weather update",
+        "defaultValue": "30",
+        "options": [
+          { "label": "Every 30 minutes", "value": "30" },
+          { "label": "Every hour", "value": "60" },
+          { "label": "Every 2 hours", "value": "120" }
+        ]
+      },
+      {
         "type": "toggle",
         "messageKey": "VibrateOnConnect",
         "label": "Vibrate on connect",

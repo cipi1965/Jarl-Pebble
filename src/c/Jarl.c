@@ -32,6 +32,8 @@ typedef struct ClaySettings
   bool VibrateOnConnect;
   bool VibrateOnDisconnect;
   GColor Colors[4];
+  // appended last so settings saved by older versions still load
+  uint8_t WeatherInterval; // minutes between weather updates
 } ClaySettings;
 
 struct tc_status {
@@ -132,6 +134,8 @@ static void load_default_settings()
   settings.Colors[1] = GColorVividCerulean;
   settings.Colors[2] = GColorYellow;
   settings.Colors[3] = GColorGreen;
+
+  settings.WeatherInterval = 30;
 }
 
 static void load_settings()
@@ -619,8 +623,13 @@ static void tick_minutos(struct tm *tick_time, TimeUnits units_changed)
   // a las horas en punto y a y media: weather and battery
   if ((minutes == 0) || (minutes == 30))
   {
-    update_temp();
     update_battery();
+  }
+
+  int interval = settings.WeatherInterval > 0 ? settings.WeatherInterval : 30;
+  if ((hours * 60 + minutes) % interval == 0)
+  {
+    update_temp();
   }
 
   // a las cero horas
@@ -770,6 +779,20 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
     settings.AnimateNumbers = animate_numbers_t->value->int32 > 0;
     settings_changed = true;
     schedule_slide_out();
+  }
+
+  Tuple *weather_interval_t = dict_find(iter, MESSAGE_KEY_WeatherInterval);
+  if (weather_interval_t)
+  {
+    // Clay sends select values as strings
+    int minutes = weather_interval_t->type == TUPLE_CSTRING
+                      ? atoi(weather_interval_t->value->cstring)
+                      : (int)weather_interval_t->value->int32;
+    if (minutes == 30 || minutes == 60 || minutes == 120)
+    {
+      settings.WeatherInterval = minutes;
+      settings_changed = true;
+    }
   }
 
   Tuple *vibrate_on_connect_t = dict_find(iter, MESSAGE_KEY_VibrateOnConnect);
