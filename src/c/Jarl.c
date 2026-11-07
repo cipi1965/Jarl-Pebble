@@ -674,6 +674,38 @@ static void main_window_unload(Window *window)
   gbitmap_destroy(battery_bitmap);
 }
 
+static void set_mini_bitmap(GBitmap **bitmap, BitmapLayer *layer, uint32_t resource_id)
+{
+  gbitmap_destroy(*bitmap);
+  *bitmap = gbitmap_create_with_resource(resource_id);
+  bitmap_layer_set_bitmap(layer, *bitmap);
+}
+
+// Draw the temperature (received in Celsius) as sign, two digits and unit.
+static void show_temperature(int celsius)
+{
+  int temp = celsius;
+  if (settings.UseCelsius == false)
+  {
+    // integer math (no soft-float library); F*10 = C*18 + 320, rounded
+    int f10 = temp * 18 + 320;
+    temp = (f10 >= 0 ? f10 + 5 : f10 - 5) / 10;
+  }
+  // only two digits fit on screen
+  if (temp > 99)
+    temp = 99;
+  if (temp < -99)
+    temp = -99;
+
+  int magnitude = temp < 0 ? -temp : temp;
+  set_mini_bitmap(&bitmap_temp_sign, layer_temp_sign,
+                  temp < 0 ? RESOURCE_ID_IMAGE_MINUS_MINI : RESOURCE_ID_IMAGE_PLUS_MINI);
+  set_mini_bitmap(&bitmap_temp_dec, layer_temp_dec, MININUMBERS_IDS[magnitude / 10]);
+  set_mini_bitmap(&bitmap_temp_unit, layer_temp_unit, MININUMBERS_IDS[magnitude % 10]);
+  set_mini_bitmap(&bitmap_temp_degrees, layer_temp_degrees,
+                  settings.UseCelsius ? RESOURCE_ID_IMAGE_C_MINI : RESOURCE_ID_IMAGE_F_MINI);
+}
+
 static void in_received_handler(DictionaryIterator *iter, void *context)
 {
   // Only write to flash when settings actually arrived (not on weather updates)
@@ -746,126 +778,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
   Tuple *temperature_t = dict_find(iter, MESSAGE_KEY_Temperature);
   if (temperature_t)
   {
-    char temperature_buffer[4];
-    int temp = (int)temperature_t->value->int32;
-    if (settings.UseCelsius == false)
-    {
-      // integer math (no soft-float library); F*10 = C*18 + 320, rounded
-      int f10 = temp * 18 + 320;
-      temp = (f10 >= 0 ? f10 + 5 : f10 - 5) / 10;
-    }
-
-    snprintf(temperature_buffer, sizeof(temperature_buffer), "%+03d", temp);
-    // signo de la temperatura
-    gbitmap_destroy(bitmap_temp_sign);
-    if (temperature_buffer[0] == '+')
-    {
-      bitmap_temp_sign = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_PLUS_MINI);
-    }
-    if (temperature_buffer[0] == '-')
-    {
-      bitmap_temp_sign = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_MINUS_MINI);
-    }
-    bitmap_layer_set_bitmap(layer_temp_sign, bitmap_temp_sign);
-    // decenas de la temperatura
-    gbitmap_destroy(bitmap_temp_dec);
-    if (temperature_buffer[1] == '0')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_0_MINI);
-    }
-    if (temperature_buffer[1] == '1')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_1_MINI);
-    }
-    if (temperature_buffer[1] == '2')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_2_MINI);
-    }
-    if (temperature_buffer[1] == '3')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_3_MINI);
-    }
-    if (temperature_buffer[1] == '4')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_4_MINI);
-    }
-    if (temperature_buffer[1] == '5')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_5_MINI);
-    }
-    if (temperature_buffer[1] == '6')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_6_MINI);
-    }
-    if (temperature_buffer[1] == '7')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_7_MINI);
-    }
-    if (temperature_buffer[1] == '8')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_8_MINI);
-    }
-    if (temperature_buffer[1] == '9')
-    {
-      bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_9_MINI);
-    }
-    bitmap_layer_set_bitmap(layer_temp_dec, bitmap_temp_dec);
-    // unidades de la temperatura
-    gbitmap_destroy(bitmap_temp_unit);
-    if (temperature_buffer[2] == '0')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_0_MINI);
-    }
-    if (temperature_buffer[2] == '1')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_1_MINI);
-    }
-    if (temperature_buffer[2] == '2')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_2_MINI);
-    }
-    if (temperature_buffer[2] == '3')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_3_MINI);
-    }
-    if (temperature_buffer[2] == '4')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_4_MINI);
-    }
-    if (temperature_buffer[2] == '5')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_5_MINI);
-    }
-    if (temperature_buffer[2] == '6')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_6_MINI);
-    }
-    if (temperature_buffer[2] == '7')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_7_MINI);
-    }
-    if (temperature_buffer[2] == '8')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_8_MINI);
-    }
-    if (temperature_buffer[2] == '9')
-    {
-      bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_9_MINI);
-    }
-    bitmap_layer_set_bitmap(layer_temp_unit, bitmap_temp_unit);
-    // grados
-
-    gbitmap_destroy(bitmap_temp_degrees);
-    if (settings.UseCelsius == false)
-    {
-      bitmap_temp_degrees = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_F_MINI);
-    }
-    else
-    {
-      bitmap_temp_degrees = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_C_MINI);
-    }
-
-    bitmap_layer_set_bitmap(layer_temp_degrees, bitmap_temp_degrees);
+    show_temperature((int)temperature_t->value->int32);
   }
 
   Tuple *conditions_t = dict_find(iter, MESSAGE_KEY_Conditions);
