@@ -198,11 +198,6 @@
           "type": "bitmap"
         },
         {
-          "file": "images/Dithered Image.png",
-          "name": "IMAGE_TROLL",
-          "type": "bitmap"
-        },
-        {
           "file": "images/clear-night.png",
           "name": "IMAGE_W_CLEAR_NIGHT",
           "type": "bitmap"

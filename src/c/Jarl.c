@@ -433,7 +433,6 @@ static void main_window_load(Window *window)
   srand(time(NULL));
 
   // Load bitmaps into GBitmap structures
-  // troll = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_TROLL);
 
   // números
   hours_dec.layer = bitmap_layer_create(GRect(0, -84, 72, 84));
@@ -633,7 +632,6 @@ static void tick_minutos(struct tm *tick_time, TimeUnits units_changed)
 
 static void main_window_unload(Window *window)
 {
-  //  gbitmap_destroy(troll);
 
   // Destroy GBitmaps
   gbitmap_destroy(hours_dec.bitmap);
