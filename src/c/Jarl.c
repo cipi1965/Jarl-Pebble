@@ -12,6 +12,9 @@
 #define TOTAL_ANIM_DIGIT_DURATION 2000
 
 #define SETTINGS_KEY 100
+// last weather received, shown at startup before the phone answers
+#define WEATHER_TEMP_KEY 101
+#define WEATHER_COND_KEY 102
 
 #define WIDTH PBL_DISPLAY_WIDTH
 #define HEIGHT PBL_DISPLAY_HEIGHT
@@ -690,8 +693,14 @@ static void set_mini_bitmap(GBitmap **bitmap, BitmapLayer *layer, uint32_t resou
 }
 
 // Draw the temperature (received in Celsius) as sign, two digits and unit.
+static int last_celsius;
+static bool have_temperature = false;
+
 static void show_temperature(int celsius)
 {
+  last_celsius = celsius;
+  have_temperature = true;
+
   int temp = celsius;
   if (settings.UseCelsius == false)
   {
@@ -725,6 +734,21 @@ static void show_conditions(int condition)
   set_mini_bitmap(&conditions_bitmap, conditions_layer, WEATHER_IDS[condition]);
 }
 
+// Avoid flash writes when the weather hasn't changed.
+static void persist_int_if_changed(uint32_t key, int32_t value)
+{
+  if (!persist_exists(key) || persist_read_int(key) != value)
+    persist_write_int(key, value);
+}
+
+static void restore_weather()
+{
+  if (persist_exists(WEATHER_TEMP_KEY))
+    show_temperature((int)persist_read_int(WEATHER_TEMP_KEY));
+  if (persist_exists(WEATHER_COND_KEY))
+    show_conditions((int)persist_read_int(WEATHER_COND_KEY));
+}
+
 static void in_received_handler(DictionaryIterator *iter, void *context)
 {
   // Only write to flash when settings actually arrived (not on weather updates)
@@ -735,7 +759,9 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
   {
     settings.UseCelsius = strcmp(temp_units_t->value->cstring, "c") == 0;
     settings_changed = true;
-    update_temp();
+    // redraw in the new unit locally; the phone always sends Celsius
+    if (have_temperature)
+      show_temperature(last_celsius);
   }
 
   Tuple *animate_numbers_t = dict_find(iter, MESSAGE_KEY_AnimateNumbers);
@@ -798,12 +824,14 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
   if (temperature_t)
   {
     show_temperature((int)temperature_t->value->int32);
+    persist_int_if_changed(WEATHER_TEMP_KEY, temperature_t->value->int32);
   }
 
   Tuple *conditions_t = dict_find(iter, MESSAGE_KEY_Conditions);
   if (conditions_t)
   {
     show_conditions((int)conditions_t->value->int32);
+    persist_int_if_changed(WEATHER_COND_KEY, conditions_t->value->int32);
   }
 }
 
@@ -836,6 +864,7 @@ static void init()
 
   // Show the Window on the watch, with animated=true
   window_stack_push(s_main_window, true);
+  restore_weather();
 
   // Register with TickTimerService
   // MINUTE_UNIT: wake once a minute; the :59 slide-out uses a one-shot AppTimer
