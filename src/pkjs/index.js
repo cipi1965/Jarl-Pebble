@@ -83,7 +83,9 @@ function getWeather() {
   navigator.geolocation.getCurrentPosition(
     locationSuccess,
     locationError,
-    {timeout: 15000, maximumAge: 60000}
+    // Weather doesn't need a fresh fix: reuse a position up to 30 minutes old
+    // and skip high-accuracy GPS to save phone battery.
+    {timeout: 15000, maximumAge: 30 * 60 * 1000, enableHighAccuracy: false}
   );
 }
 
