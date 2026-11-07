@@ -195,7 +195,8 @@ def build(glyphs, height, gap, family, out):
             name, char = "space", " "
             advance = len(rows[0]) * PX
         else:
-            name, char = f"uni{ord(key):04X}", key
+            cp = ord(key)
+            name, char = (f"uni{cp:04X}" if cp <= 0xFFFF else f"u{cp:05X}"), key
             advance = (len(rows[0]) + gap) * PX
         names.append(name)
         outlines[name] = draw(rows)
