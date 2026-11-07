@@ -31,6 +31,7 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 
 PX = 64  # font units per pixel
+FIXED_TIMESTAMP = 3876854400  # 2026-11-07, seconds since 1904 (TrueType epoch)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONTS = os.path.join(HERE, "..", "resources", "fonts")
@@ -90,12 +91,74 @@ def slash(width, height, stroke):
     ]
 
 
+DIAGONAL = set("KVXYZ%/")
+
+
 def scale_up(name, rows):
     if name == "/":
         return slash(12, BIG_ROWS, 4)
     width = len(rows[0])
     col_map = COL_MAPS.get(width) or [int(c * width / (width * 4 // 3)) for c in range(width * 4 // 3)]
-    return ["".join(rows[r][c] for c in col_map) for r in ROW_MAP]
+    scaled = ["".join(rows[r][c] for c in col_map) for r in ROW_MAP]
+    # diagonal strokes are staircases, which the corner rules would pick apart
+    return scaled if name in DIAGONAL else round_corners(scaled)
+
+
+def round_corners(rows):
+    """Rounder curves for the big glyphs (Pebble fonts are 1-bit, so the
+    smoothing has to be in the pixels).
+
+    Outer corners: a 1 px corner cut becomes a 2-step curve
+        .####     ..###
+        #####  -> .####
+        #####     #####
+    Inner corners: a 1 px fillet becomes 2 px.
+    Both only apply where the edges run on long enough that the corner is a
+    real curve, so stem tips (I, 1, H legs) and narrow gaps (M, W) keep their
+    shape, and deliberately square corners (no cut / no fillet) stay square.
+    """
+    h, w = len(rows), len(rows[0])
+    src = [list(r) for r in rows]
+    out = [list(r) for r in rows]
+
+    def ink(y, x):
+        return 0 <= y < h and 0 <= x < w and src[y][x] == "#"
+
+    def run(y, x, dy, dx, want):
+        n = 0
+        while 0 <= y < h and 0 <= x < w and (src[y][x] == "#") == want:
+            n, y, x = n + 1, y + dy, x + dx
+        return n
+
+    def clear(y, x, dy, dx, n):
+        """n pixels from (y, x) along (dy, dx) are empty (off the glyph counts)."""
+        return all(not ink(y + i * dy, x + i * dx) for i in range(n))
+
+    for y in range(h):
+        for x in range(w):
+            for dy in (1, -1):  # direction into the glyph, vertically
+                for dx in (1, -1):  # and horizontally
+                    # outer corner: empty cut pixel with ink beside and below
+                    # it, on the outside of both edges (open space along the
+                    # edge, not the stepped inside of a curve like D's)
+                    if (not ink(y, x) and not ink(y - dy, x) and not ink(y, x - dx)
+                            and ink(y, x + dx) and ink(y + dy, x) and ink(y + dy, x + dx)
+                            and run(y, x + dx, 0, dx, True) >= 5
+                            and run(y + dy, x, dy, 0, True) >= 5
+                            and clear(y - dy, x, 0, dx, 5)
+                            and clear(y, x - dx, dy, 0, 5)):
+                        out[y][x + dx] = "."
+                        out[y + dy][x] = "."
+                    # inner corner: a fillet pixel inside an opening
+                    if (ink(y, x) and ink(y - dy, x) and ink(y, x - dx)
+                            and not ink(y, x + dx) and not ink(y + dy, x)
+                            and not ink(y + dy, x + dx)
+                            and ink(y - dy, x + dx) and ink(y + dy, x - dx)
+                            and run(y, x + dx, 0, dx, False) >= 4
+                            and run(y + dy, x, dy, 0, False) >= 4):
+                        out[y][x + dx] = "#"
+                        out[y + dy][x] = "#"
+    return ["".join(r) for r in out]
 
 
 def draw(rows):
@@ -154,6 +217,9 @@ def build(glyphs, height, gap, family, out):
     fb.setupNameTable({"familyName": family, "styleName": "Regular"})
     fb.setupOS2(sTypoAscender=height * PX, sTypoDescender=0, usWinAscent=height * PX, usWinDescent=0)
     fb.setupPost()
+    # fixed timestamps so rebuilding without glyph changes gives identical files
+    fb.updateHead(created=FIXED_TIMESTAMP, modified=FIXED_TIMESTAMP)
+    fb.font.recalcTimestamp = False
 
     os.makedirs(FONTS, exist_ok=True)
     fb.save(out)
