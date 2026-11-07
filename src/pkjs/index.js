@@ -2,8 +2,62 @@
 var Clay = require('@rebble/clay');
 // Load our Clay configuration file
 var clayConfig = require('./config');
-// Initialize Clay
-var clay = new Clay(clayConfig);
+// Initialize Clay. Events are handled below so the settings page only lists
+// the complications this watch supports.
+var clay = new Clay(clayConfig, null, { autoHandleEvents: false });
+
+var HEALTH_PLATFORMS = ['basalt', 'chalk', 'diorite', 'emery', 'flint', 'gabbro'];
+var HEART_RATE_PLATFORMS = ['diorite', 'emery'];
+
+function supported(option, platform) {
+  if (option.requires === 'health') return HEALTH_PLATFORMS.indexOf(platform) >= 0;
+  if (option.requires === 'heartrate') return HEART_RATE_PLATFORMS.indexOf(platform) >= 0;
+  return true;
+}
+
+// Copy of the config without the options this watch can't show
+function configFor(platform) {
+  return JSON.parse(JSON.stringify(clayConfig), function(key, value) {
+    if (key === 'options' && Array.isArray(value)) {
+      return value.filter(function(o) { return supported(o, platform); })
+        .map(function(o) { return { label: o.label, value: o.value }; });
+    }
+    return value;
+  });
+}
+
+Pebble.addEventListener('showConfiguration', function() {
+  var info = Pebble.getActiveWatchInfo ? Pebble.getActiveWatchInfo() : null;
+  clay.config = configFor(info ? info.platform : 'basalt');
+  Pebble.openURL(clay.generateUrl());
+});
+
+Pebble.addEventListener('webviewclosed', function(e) {
+  if (!e || !e.response) { return; }
+  Pebble.sendAppMessage(clay.getSettings(e.response), function() {
+    console.log('Sent config data to Pebble');
+  }, function(error) {
+    console.log('Failed to send config data!');
+    console.log(JSON.stringify(error));
+  });
+});
+
+var WEATHER_COMPLICATIONS = ['1', '2', '12', '13', '14', '15', '16', '17'];
+var DEFAULT_SLOTS = ['2', '1', '3', '4'];
+
+// True when a panel spot shows weather (checked before fetching it)
+function weatherNeeded() {
+  var settings = {};
+  try {
+    settings = JSON.parse(localStorage.getItem('clay-settings')) || {};
+  } catch (err) {}
+  for (var i = 0; i < 4; i++) {
+    var value = settings['Slot' + (i + 1)];
+    if (value === undefined) value = DEFAULT_SLOTS[i];
+    if (WEATHER_COMPLICATIONS.indexOf(String(value)) >= 0) return true;
+  }
+  return false;
+}
 
 
 // The watch asks for weather on its schedule (and when units change).
@@ -44,10 +98,29 @@ function weatherCodeToCondition(code, is_day) {
 
 var WEATHER_CACHE_KEY = 'weather';
 
+// The watch reads -1000 as "no value"
+var NO_VALUE = -1000;
+
+function orNoValue(v) {
+  return typeof v === 'number' && !isNaN(v) ? Math.round(v) : NO_VALUE;
+}
+
+// "2026-11-07T06:52" (local time of the location) -> minutes after midnight
+function minutesOfDay(iso) {
+  var m = typeof iso === 'string' && iso.match(/T(\d\d):(\d\d)/);
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : NO_VALUE;
+}
+
 function sendWeather(weather) {
   Pebble.sendAppMessage({
       "Temperature": weather.temperature,
-      "Conditions": weather.conditions
+      "Conditions": weather.conditions,
+      "TempHigh": weather.high,
+      "TempLow": weather.low,
+      "Humidity": weather.humidity,
+      "RainChance": weather.rain,
+      "Sunrise": weather.sunrise,
+      "Sunset": weather.sunset
     },
     function(e) {
       console.log("Weather info sent to Pebble successfully!");
@@ -72,16 +145,26 @@ function locationSuccess(pos) {
   var url = 'https://api.open-meteo.com/v1/forecast?' +
       'latitude=' + pos.coords.latitude +
       '&longitude=' + pos.coords.longitude +
-      '&current=temperature_2m,weather_code,is_day';
+      '&current=temperature_2m,weather_code,is_day,relative_humidity_2m' +
+      '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset' +
+      '&timezone=auto&forecast_days=1';
   // Send request to OpenWeatherMap
   xhrRequest(url, 'GET', 
     function(responseText) {
       // responseText contains a JSON object with weather info
       var json = JSON.parse(responseText);
 
+      var daily = json.daily || {};
+      var first = function(a) { return a ? a[0] : null; };
       var weather = {
         temperature: Math.round(json.current.temperature_2m),
         conditions: weatherCodeToCondition(json.current.weather_code, json.current.is_day),
+        high: orNoValue(first(daily.temperature_2m_max)),
+        low: orNoValue(first(daily.temperature_2m_min)),
+        humidity: orNoValue(json.current.relative_humidity_2m),
+        rain: orNoValue(first(daily.precipitation_probability_max)),
+        sunrise: minutesOfDay(first(daily.sunrise)),
+        sunset: minutesOfDay(first(daily.sunset)),
         time: Date.now()
       };
       try {
@@ -99,7 +182,8 @@ function locationError(err) {
 // Send cached weather if it is younger than maxAgeMs, otherwise fetch it.
 function getWeather(maxAgeMs) {
   var cached = cachedWeather();
-  if (cached && Date.now() - cached.time < maxAgeMs) {
+  // caches from older versions lack the daily fields: fetch again
+  if (cached && cached.sunset !== undefined && Date.now() - cached.time < maxAgeMs) {
     console.log("Using cached weather");
     sendWeather(cached);
     return;
@@ -120,6 +204,8 @@ Pebble.addEventListener('ready',
 
     // The watchface restarts after every notification or app, so reuse
     // weather fetched in the last 30 minutes instead of fetching again.
-    getWeather(30 * 60 * 1000);
+    if (weatherNeeded()) {
+      getWeather(30 * 60 * 1000);
+    }
   }
 );

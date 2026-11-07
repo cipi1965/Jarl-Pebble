@@ -1,3 +1,37 @@
+// What a panel spot can show. The values are enum Complication in
+// src/c/Jarl.c. "requires" options are removed on watches without the
+// hardware (see index.js); "top" options only fit the top row.
+var COMPLICATIONS = [
+  { "label": "Nothing", "value": "0" },
+  { "label": "Weather icon", "value": "1", "top": true },
+  { "label": "Temperature", "value": "2" },
+  { "label": "Today's high", "value": "12" },
+  { "label": "Today's low", "value": "13" },
+  { "label": "Humidity", "value": "14" },
+  { "label": "Chance of rain", "value": "15" },
+  { "label": "Sunrise", "value": "16" },
+  { "label": "Sunset", "value": "17" },
+  { "label": "Day of the week", "value": "3" },
+  { "label": "Day of the month", "value": "4" },
+  { "label": "Month", "value": "5" },
+  { "label": "Week number", "value": "6" },
+  { "label": "Day of the year", "value": "7" },
+  { "label": "Battery", "value": "8" },
+  { "label": "Steps", "value": "9", "requires": "health" },
+  { "label": "Distance walked", "value": "10", "requires": "health" },
+  { "label": "Heart rate", "value": "11", "requires": "heartrate" }
+];
+
+function slot(messageKey, label, defaultValue, top) {
+  return {
+    "type": "select",
+    "messageKey": messageKey,
+    "label": label,
+    "defaultValue": defaultValue,
+    "options": COMPLICATIONS.filter(function(c) { return top || !c.top; })
+  };
+}
+
 module.exports = [
   {
     "type": "heading",
@@ -55,6 +89,23 @@ module.exports = [
         "label": "Vibrate on disconnect",
         "defaultValue": false
       },
+    ]
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "heading",
+        "defaultValue": "Info panel"
+      },
+      {
+        "type": "text",
+        "defaultValue": "Shown when you flick your wrist."
+      },
+      slot("Slot1", "Top left", "2", true),
+      slot("Slot2", "Top right", "1", true),
+      slot("Slot3", "Middle left", "3", false),
+      slot("Slot4", "Middle right", "4", false)
     ]
   },
   {

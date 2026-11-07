@@ -38,7 +38,17 @@
       "Color2",
       "Color3",
       "Color4",
-      "WeatherInterval"
+      "WeatherInterval",
+      "Slot1",
+      "Slot2",
+      "Slot3",
+      "Slot4",
+      "TempHigh",
+      "TempLow",
+      "Humidity",
+      "RainChance",
+      "Sunrise",
+      "Sunset"
     ],
     "resources": {
       "media": [

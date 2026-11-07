@@ -15,6 +15,7 @@
 // last weather received, shown at startup before the phone answers
 #define WEATHER_TEMP_KEY 101
 #define WEATHER_COND_KEY 102
+#define WEATHER_EXTRA_KEY 103
 
 #define WIDTH PBL_DISPLAY_WIDTH
 #define HEIGHT PBL_DISPLAY_HEIGHT
@@ -25,6 +26,34 @@
 
 // #define DEBUG_MEMORY
 
+// What a spot of the info panel shows. The numbers are the values of the
+// Slot settings in src/pkjs/config.js, so don't renumber them.
+enum Complication
+{
+  C_NONE = 0,
+  C_WEATHER_ICON = 1, // top row only: the icon is 42 px tall
+  C_TEMPERATURE = 2,
+  C_DAY_NAME = 3,
+  C_DAY_NUMBER = 4,
+  C_MONTH = 5,
+  C_WEEK = 6,
+  C_DAY_OF_YEAR = 7,
+  C_BATTERY = 8,
+  C_STEPS = 9,
+  C_DISTANCE = 10,
+  C_HEART_RATE = 11,
+  C_TEMP_HIGH = 12,
+  C_TEMP_LOW = 13,
+  C_HUMIDITY = 14,
+  C_RAIN_CHANCE = 15,
+  C_SUNRISE = 16,
+  C_SUNSET = 17,
+  C_COUNT
+};
+
+// Panel spots: top left, top right, middle left, middle right
+#define SLOT_COUNT 4
+
 typedef struct ClaySettings
 {
   bool UseCelsius;
@@ -34,6 +63,7 @@ typedef struct ClaySettings
   GColor Colors[4];
   // appended last so settings saved by older versions still load
   uint8_t WeatherInterval; // minutes between weather updates
+  uint8_t Slots[SLOT_COUNT]; // enum Complication for each panel spot
 } ClaySettings;
 
 struct tc_status {
@@ -51,9 +81,18 @@ const int BATTERY_RESOURCE_IDS[10] = {
     RESOURCE_ID_IMAGE_BATTERY_70, RESOURCE_ID_IMAGE_BATTERY_80, RESOURCE_ID_IMAGE_BATTERY_90,
     RESOURCE_ID_IMAGE_BATTERY_100};
 
-// Day names drawn with the Jarl Mini font (fixed English, like the old
-// day bitmaps; not taken from the locale, so only font glyphs are used)
+// Day and month names drawn with the Jarl Mini font (fixed English, like the
+// old day bitmaps; not taken from the locale, so only font glyphs are used)
 static const char *const DAY_NAMES[7] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+static const char *const MONTH_NAMES[12] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                                            "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+
+// Icon glyphs of the Jarl Mini font (tools/jarl_mini_glyphs.txt)
+#define ICON_HEART "♥"
+#define ICON_DROP "\U0001F4A7"
+#define ICON_UMBRELLA "☂"
+#define ICON_UP "▲"
+#define ICON_DOWN "▼"
 
 const int NUMBERS_IDS[10] = {
     RESOURCE_ID_NUMBER_0, RESOURCE_ID_NUMBER_1, RESOURCE_ID_NUMBER_2,
@@ -93,26 +132,33 @@ static Window *s_main_window;
 #define MINI_DEG_W 6
 #define DATE_Y 48
 #endif
-// Layer widths include the gap after the last glyph, or TextLayer drops it.
-#define TEMP_W (4 * MINI_GW + MINI_DEG_W + 5 * MINI_GAP) /* "+21°C" */
-#define TEMP_X (((WIDTH / 2) - (TEMP_W - MINI_GAP)) / 2)
-#define TEMP_Y ((42 - MINI_H) / 2) /* centred on the 42 px weather icon */
-#define DAY_W (3 * (MINI_GW + MINI_GAP)) /* "MON" */
-#define DAY_X (((WIDTH / 2) - (DAY_W - MINI_GAP)) / 2)
-#define DAYNUM_W (2 * (MINI_GW + MINI_GAP)) /* "07" */
-#define DAYNUM_X ((WIDTH / 2) + ((WIDTH / 2) - (2 * MINI_GW + MINI_GAP)) / 2)
+#define ICON_H 42 /* weather icon height = height of the top panel row */
 static GFont mini_font;
-static TextLayer *temp_layer, *day_layer, *daynum_layer;
-static char temp_text[10] = "----";
-static char daynum_text[3];
 
-static uint8_t battery_level;
+// One layer per panel spot, each half the screen wide. It draws its text
+// centred, or the weather icon.
+static Layer *slot_layers[SLOT_COUNT];
+static char slot_text[SLOT_COUNT][16];
+
+static uint8_t battery_level = 255;
 
 static GBitmap *battery_bitmap;
 static BitmapLayer *battery_layer;
 
-static BitmapLayer *conditions_layer;
 static GBitmap *conditions_bitmap;
+
+// Weather from the phone; extra fields are unknown until the first update
+// from a version that sends them.
+#define NO_VALUE INT16_MIN
+typedef struct WeatherExtra
+{
+  int16_t high, low;       // Celsius
+  int16_t humidity, rain;  // percent
+  int16_t sunrise, sunset; // minutes after local midnight
+} WeatherExtra;
+static WeatherExtra weather_extra = {NO_VALUE, NO_VALUE, NO_VALUE, NO_VALUE, NO_VALUE, NO_VALUE};
+static int last_celsius;
+static bool have_temperature = false;
 
 static bool on_animation = false;
 static bool start = true;
@@ -156,6 +202,25 @@ static void load_default_settings()
   settings.Colors[3] = GColorGreen;
 
   settings.WeatherInterval = 30;
+
+  // the panel as it was before the spots became configurable
+  settings.Slots[0] = C_TEMPERATURE;
+  settings.Slots[1] = C_WEATHER_ICON;
+  settings.Slots[2] = C_DAY_NAME;
+  settings.Slots[3] = C_DAY_NUMBER;
+}
+
+static bool slot_uses_weather(uint8_t c)
+{
+  return c == C_WEATHER_ICON || c == C_TEMPERATURE || (c >= C_TEMP_HIGH && c <= C_SUNSET);
+}
+
+static bool panel_uses_weather()
+{
+  for (int i = 0; i < SLOT_COUNT; i++)
+    if (slot_uses_weather(settings.Slots[i]))
+      return true;
+  return false;
 }
 
 static void load_settings()
@@ -208,32 +273,274 @@ static void bluetooth_callback(bool connected)
   }
 }
 
-static void update_date()
-{
-  time_t temp = time(NULL);
-  struct tm *tick_time = localtime(&temp);
-
-  text_layer_set_text(day_layer, DAY_NAMES[tick_time->tm_wday]);
-  strftime(daynum_text, sizeof(daynum_text), "%d", tick_time);
-  text_layer_set_text(daynum_layer, daynum_text);
-}
-
 static void update_battery()
 {
-  // battery update
-  int level;
-  BatteryChargeState initial = battery_state_service_peek();
-  battery_level = initial.charge_percent;
-  gbitmap_destroy(battery_bitmap);
-  level = battery_level / 10;
+  BatteryChargeState state = battery_state_service_peek();
+  if (state.charge_percent == battery_level)
+    return; // same bitmap; skip reloading it
+  battery_level = state.charge_percent;
+  int level = battery_level / 10;
   if (level == 10)
     level = 9;
+  gbitmap_destroy(battery_bitmap);
   battery_bitmap = gbitmap_create_with_resource(BATTERY_RESOURCE_IDS[level]);
   bitmap_layer_set_bitmap(battery_layer, battery_bitmap);
 }
 
+// ISO 8601 week number (weeks start on Monday, week 1 holds the first Thursday)
+static int iso_weeks_in_year(int year)
+{
+  int p = (year + year / 4 - year / 100 + year / 400) % 7;
+  int y = year - 1;
+  int q = (y + y / 4 - y / 100 + y / 400) % 7;
+  return (p == 4 || q == 3) ? 53 : 52;
+}
+
+static int iso_week(const struct tm *t)
+{
+  int weekday = t->tm_wday == 0 ? 7 : t->tm_wday; // Monday = 1 ... Sunday = 7
+  int year = t->tm_year + 1900;
+  int week = (t->tm_yday + 1 - weekday + 10) / 7;
+  if (week < 1)
+    return iso_weeks_in_year(year - 1);
+  if (week > iso_weeks_in_year(year))
+    return 1;
+  return week;
+}
+
+// Temperature in the display unit; the phone always sends Celsius.
+static int display_temp(int celsius)
+{
+  if (settings.UseCelsius)
+    return celsius;
+  // integer math (no soft-float library); F*10 = C*18 + 320, rounded
+  int f10 = celsius * 18 + 320;
+  return (f10 >= 0 ? f10 + 5 : f10 - 5) / 10;
+}
+
+static int clamp(int v, int lo, int hi)
+{
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+static void format_clock_time(char *buf, size_t size, int minutes)
+{
+  int h = minutes / 60, m = minutes % 60;
+  if (clock_is_24h_style())
+  {
+    snprintf(buf, size, "%02d:%02d", h, m);
+    return;
+  }
+  h %= 12;
+  snprintf(buf, size, "%d:%02d", h == 0 ? 12 : h, m);
+}
+
+#if defined(PBL_HEALTH)
+static bool health_available(HealthMetric metric, time_t start, time_t end)
+{
+  return health_service_metric_accessible(metric, start, end) & HealthServiceAccessibilityMaskAvailable;
+}
+
+static void format_steps(char *buf, size_t size)
+{
+  time_t now = time(NULL);
+  if (!health_available(HealthMetricStepCount, time_start_of_today(), now))
+  {
+    snprintf(buf, size, "--");
+    return;
+  }
+  int steps = (int)health_service_sum_today(HealthMetricStepCount);
+  if (steps < 10000)
+    snprintf(buf, size, "%d", steps); // "8421"
+  else if (steps < 100000)
+    snprintf(buf, size, "%d.%dK", steps / 1000, steps / 100 % 10); // "12.3K"
+  else
+    snprintf(buf, size, "%dK", steps / 1000);
+}
+
+static void format_distance(char *buf, size_t size)
+{
+  time_t now = time(NULL);
+  if (!health_available(HealthMetricWalkedDistanceMeters, time_start_of_today(), now))
+  {
+    snprintf(buf, size, "--");
+    return;
+  }
+  int meters = (int)health_service_sum_today(HealthMetricWalkedDistanceMeters);
+  bool imperial = health_service_get_measurement_system_for_display(HealthMetricWalkedDistanceMeters) ==
+                  MeasurementSystemImperial;
+  // tenths of a km or mile
+  int tenths = imperial ? (int)((int64_t)meters * 10 * 1000 / 1609344) : meters / 100;
+  const char *unit = imperial ? "MI" : "KM";
+  if (tenths < 100)
+    snprintf(buf, size, "%d.%d%s", tenths / 10, tenths % 10, unit); // "3.2KM"
+  else
+    snprintf(buf, size, "%d%s", clamp(tenths / 10, 0, 99), unit); // "12KM"
+}
+
+static void format_heart_rate(char *buf, size_t size)
+{
+  time_t now = time(NULL);
+  int bpm = 0;
+  if (health_available(HealthMetricHeartRateBPM, now, now))
+    bpm = (int)health_service_peek_current_value(HealthMetricHeartRateBPM);
+  if (bpm > 0)
+    snprintf(buf, size, ICON_HEART "%d", bpm);
+  else
+    snprintf(buf, size, ICON_HEART "--");
+}
+#endif
+
+static void format_complication(uint8_t c, char *buf, size_t size, const struct tm *t)
+{
+  buf[0] = '\0';
+  switch (c)
+  {
+  case C_TEMPERATURE:
+    if (!have_temperature)
+    {
+      snprintf(buf, size, "----");
+      break;
+    }
+    {
+      // sign, two digits and unit: only two digits fit next to the unit
+      int temp = clamp(display_temp(last_celsius), -99, 99);
+      snprintf(buf, size, "%c%02d°%c", temp < 0 ? '-' : '+', temp < 0 ? -temp : temp,
+               settings.UseCelsius ? 'C' : 'F');
+    }
+    break;
+  case C_DAY_NAME:
+    snprintf(buf, size, "%s", DAY_NAMES[t->tm_wday]);
+    break;
+  case C_DAY_NUMBER:
+    snprintf(buf, size, "%02d", t->tm_mday);
+    break;
+  case C_MONTH:
+    snprintf(buf, size, "%s", MONTH_NAMES[t->tm_mon]);
+    break;
+  case C_WEEK:
+    snprintf(buf, size, "W%02d", iso_week(t));
+    break;
+  case C_DAY_OF_YEAR:
+    snprintf(buf, size, "D%03d", t->tm_yday + 1);
+    break;
+  case C_BATTERY:
+    snprintf(buf, size, "%d%%", battery_state_service_peek().charge_percent);
+    break;
+#if defined(PBL_HEALTH)
+  case C_STEPS:
+    format_steps(buf, size);
+    break;
+  case C_DISTANCE:
+    format_distance(buf, size);
+    break;
+  case C_HEART_RATE:
+    format_heart_rate(buf, size);
+    break;
+#else
+  case C_STEPS:
+  case C_DISTANCE:
+    snprintf(buf, size, "--");
+    break;
+  case C_HEART_RATE:
+    snprintf(buf, size, ICON_HEART "--");
+    break;
+#endif
+  case C_TEMP_HIGH:
+  case C_TEMP_LOW:
+  {
+    int16_t celsius = c == C_TEMP_HIGH ? weather_extra.high : weather_extra.low;
+    const char *icon = c == C_TEMP_HIGH ? ICON_UP : ICON_DOWN;
+    if (celsius == NO_VALUE)
+      snprintf(buf, size, "%s--", icon);
+    else
+      snprintf(buf, size, "%s%d°", icon, clamp(display_temp(celsius), -99, 199));
+    break;
+  }
+  case C_HUMIDITY:
+  case C_RAIN_CHANCE:
+  {
+    int16_t percent = c == C_HUMIDITY ? weather_extra.humidity : weather_extra.rain;
+    const char *icon = c == C_HUMIDITY ? ICON_DROP : ICON_UMBRELLA;
+    if (percent == NO_VALUE)
+      snprintf(buf, size, "%s--", icon);
+    else
+      snprintf(buf, size, "%s%d%%", icon, clamp(percent, 0, 100));
+    break;
+  }
+  case C_SUNRISE:
+  case C_SUNSET:
+  {
+    int16_t minutes = c == C_SUNRISE ? weather_extra.sunrise : weather_extra.sunset;
+    if (minutes == NO_VALUE)
+      snprintf(buf, size, "--:--");
+    else
+      format_clock_time(buf, size, minutes);
+    break;
+  }
+  default: // C_NONE, C_WEATHER_ICON (drawn as a bitmap)
+    break;
+  }
+}
+
+// Recompute the text of every panel spot. Runs when the panel slides in and
+// when its data changes, so nothing is read while the panel is hidden.
+static void refresh_panel()
+{
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+  for (int i = 0; i < SLOT_COUNT; i++)
+  {
+    format_complication(settings.Slots[i], slot_text[i], sizeof(slot_text[i]), t);
+    layer_mark_dirty(slot_layers[i]);
+  }
+}
+
+static void slot_update_proc(Layer *layer, GContext *ctx)
+{
+  int i = *(int *)layer_get_data(layer);
+  GRect bounds = layer_get_bounds(layer);
+
+  if (settings.Slots[i] == C_WEATHER_ICON)
+  {
+    if (conditions_bitmap)
+    {
+      GSize size = gbitmap_get_bounds(conditions_bitmap).size;
+      graphics_draw_bitmap_in_rect(ctx, conditions_bitmap,
+                                   GRect((bounds.size.w - size.w) / 2, (bounds.size.h - size.h) / 2,
+                                         size.w, size.h));
+    }
+    return;
+  }
+
+  const char *text = slot_text[i];
+  if (!text[0])
+    return;
+  // The text size includes the gap after the last glyph: leave it out when
+  // centring, and keep it in the box or the last glyph is dropped.
+  GSize size = graphics_text_layout_get_content_size(text, mini_font, GRect(0, 0, 2 * WIDTH, MINI_H),
+                                                     GTextOverflowModeFill, GTextAlignmentLeft);
+  int x = (bounds.size.w - (size.w - MINI_GAP)) / 2;
+  int y = (bounds.size.h - MINI_H) / 2;
+  graphics_context_set_text_color(ctx, GColorWhite);
+  graphics_draw_text(ctx, text, mini_font, GRect(x, y, size.w + MINI_GAP, MINI_H),
+                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+}
+
+// Frame of panel spot i, on screen or hidden above it
+static GRect slot_frame(int i, bool shown)
+{
+  int x = (i % 2) * HOR_OFFSET;
+  if (i < 2)
+    return GRect(x, shown ? 0 : -VER_OFFSET, HOR_OFFSET, ICON_H);
+  return GRect(x, shown ? DATE_Y : DATE_Y - ANIM_LENGTH, HOR_OFFSET, MINI_H);
+}
+
 void update_temp()
 {
+  if (!panel_uses_weather())
+    return; // no spot shows weather: don't ask the phone for it
+
   DictionaryIterator *iter;
   // Fails when the phone is disconnected or a send is in flight; iter is
   // then not valid, so don't write to it.
@@ -315,18 +622,15 @@ static void update_time()
 
 void timer_callback(void *data)
 {
-  // animate temperature
-  animate_layer(text_layer_get_layer(temp_layer), &GRect(TEMP_X, TEMP_Y, TEMP_W, MINI_H), &GRect(TEMP_X, TEMP_Y - VER_OFFSET, TEMP_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
-
-  // animate date
-  animate_layer(text_layer_get_layer(day_layer), &GRect(DAY_X, DATE_Y, DAY_W, MINI_H), &GRect(DAY_X, DATE_Y - ANIM_LENGTH, DAY_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(text_layer_get_layer(daynum_layer), &GRect(DAYNUM_X, DATE_Y, DAYNUM_W, MINI_H), &GRect(DAYNUM_X, DATE_Y - ANIM_LENGTH, DAYNUM_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
+  // animate panel spots
+  for (int i = 0; i < SLOT_COUNT; i++)
+  {
+    GRect from = slot_frame(i, true), to = slot_frame(i, false);
+    animate_layer(slot_layers[i], &from, &to, ANIM_DURATION_UP, ANIM_DELAY);
+  }
 
   // animate battery
   animate_layer(bitmap_layer_get_layer(battery_layer), &GRect((WIDTH - 144) / 2, -10 + ANIM_LENGTH, 144, 6), &GRect((WIDTH - 144) / 2, -10, 144, 6), ANIM_DURATION_UP, ANIM_DELAY);
-
-  // animate conditions
-  animate_layer(bitmap_layer_get_layer(conditions_layer), &GRect(HOR_OFFSET, 0, HOR_OFFSET, 42), &GRect(HOR_OFFSET, -VER_OFFSET, HOR_OFFSET, 42), ANIM_DURATION_UP, ANIM_DELAY);
 
   // animate time
   animate_layer(bitmap_layer_get_layer(hours_dec.layer), &GRect(X_ORIGIN, ANIM_LENGTH, HOR_OFFSET, VER_OFFSET), &GRect(X_ORIGIN, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_UP, ANIM_DELAY);
@@ -350,41 +654,22 @@ static void accel_tap_handler(AccelAxisType axis, int32_t direction)
   {
     on_animation = true;
 
-    // animate temperature
-    animate_layer(
-      text_layer_get_layer(temp_layer),
-      &GRect(TEMP_X, TEMP_Y - VER_OFFSET, TEMP_W, MINI_H),
-      &GRect(TEMP_X, TEMP_Y, TEMP_W, MINI_H),
-      ANIM_DURATION_DOWN, ANIM_DELAY
-    );
+    // fresh steps, heart rate, battery and date for the panel
+    update_battery();
+    refresh_panel();
 
-    // animate date
-    animate_layer(
-      text_layer_get_layer(day_layer),
-      &GRect(DAY_X, DATE_Y - ANIM_LENGTH, DAY_W, MINI_H),
-      &GRect(DAY_X, DATE_Y, DAY_W, MINI_H),
-      ANIM_DURATION_DOWN, ANIM_DELAY
-    );
-    animate_layer(
-      text_layer_get_layer(daynum_layer),
-      &GRect(DAYNUM_X, DATE_Y - ANIM_LENGTH, DAYNUM_W, MINI_H),
-      &GRect(DAYNUM_X, DATE_Y, DAYNUM_W, MINI_H),
-      ANIM_DURATION_DOWN, ANIM_DELAY
-    );
+    // animate panel spots
+    for (int i = 0; i < SLOT_COUNT; i++)
+    {
+      GRect from = slot_frame(i, false), to = slot_frame(i, true);
+      animate_layer(slot_layers[i], &from, &to, ANIM_DURATION_DOWN, ANIM_DELAY);
+    }
 
     // animate battery
     animate_layer(
       bitmap_layer_get_layer(battery_layer),
       &GRect((WIDTH - 144) / 2, -10, 144, 6),
       &GRect((WIDTH - 144) / 2, -10 + ANIM_LENGTH, 144, 6),
-      ANIM_DURATION_DOWN, ANIM_DELAY
-    );
-
-    // animate weather conditions
-    animate_layer(
-      bitmap_layer_get_layer(conditions_layer),
-      &GRect(HOR_OFFSET, -VER_OFFSET, HOR_OFFSET, 42),
-      &GRect(HOR_OFFSET, 0, HOR_OFFSET, 42),
       ANIM_DURATION_DOWN, ANIM_DELAY
     );
 
@@ -409,17 +694,6 @@ void timer_callback3(void *data)
   on_animation = false;
 }
 
-static TextLayer *make_mini_text_layer(Window *window, GRect frame)
-{
-  TextLayer *layer = text_layer_create(frame);
-  text_layer_set_background_color(layer, GColorClear);
-  text_layer_set_text_color(layer, GColorWhite);
-  text_layer_set_font(layer, mini_font);
-  text_layer_set_text_alignment(layer, GTextAlignmentLeft);
-  layer_add_child(window_get_root_layer(window), text_layer_get_layer(layer));
-  return layer;
-}
-
 static void main_window_load(Window *window)
 {
   srand(time(NULL));
@@ -436,20 +710,19 @@ static void main_window_load(Window *window)
   minutes_unit.layer = bitmap_layer_create(GRect(73, 168, 72, 84));
   layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(minutes_unit.layer));
 
-  // Info panel text (hidden above the screen until the panel slides in)
+  // Info panel spots (hidden above the screen until the panel slides in)
   mini_font = fonts_load_custom_font(resource_get_handle(MINI_FONT));
-  temp_layer = make_mini_text_layer(window, GRect(TEMP_X, TEMP_Y - VER_OFFSET, TEMP_W, MINI_H));
-  text_layer_set_text(temp_layer, temp_text);
-  day_layer = make_mini_text_layer(window, GRect(DAY_X, DATE_Y - ANIM_LENGTH, DAY_W, MINI_H));
-  daynum_layer = make_mini_text_layer(window, GRect(DAYNUM_X, DATE_Y - ANIM_LENGTH, DAYNUM_W, MINI_H));
+  for (int i = 0; i < SLOT_COUNT; i++)
+  {
+    slot_layers[i] = layer_create_with_data(slot_frame(i, false), sizeof(int));
+    *(int *)layer_get_data(slot_layers[i]) = i;
+    layer_set_update_proc(slot_layers[i], slot_update_proc);
+    layer_add_child(window_get_root_layer(window), slot_layers[i]);
+  }
 
   // create battery layers
   battery_layer = bitmap_layer_create(GRect(0, -10, 144, 6));
   layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(battery_layer));
-
-  // conditions
-  conditions_layer = bitmap_layer_create(GRect(72, -84, 72, 42));
-  layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(conditions_layer));
 
 // BORRAR
 #ifdef DEBUG_MEMORY
@@ -473,7 +746,7 @@ static void main_window_load(Window *window)
   // bluetooth_callback(connection_service_peek_pebble_app_connection());
 
   update_battery();
-  update_date();
+  refresh_panel();
 
   rand_minutes_unit = 1;
   rand_minutes_dec = 0;
@@ -591,7 +864,7 @@ static void tick_minutos(struct tm *tick_time, TimeUnits units_changed)
   // a las cero horas
   if (units_changed & DAY_UNIT)
   {
-    update_date();
+    refresh_panel();
   }
 
   update_time();
@@ -622,12 +895,10 @@ static void main_window_unload(Window *window)
   bitmap_layer_destroy(minutes_unit.layer);
 
   gbitmap_destroy(conditions_bitmap);
-  bitmap_layer_destroy(conditions_layer);
 
-  // Destroy info panel text
-  text_layer_destroy(temp_layer);
-  text_layer_destroy(day_layer);
-  text_layer_destroy(daynum_layer);
+  // Destroy info panel spots
+  for (int i = 0; i < SLOT_COUNT; i++)
+    layer_destroy(slot_layers[i]);
   fonts_unload_custom_font(mini_font);
 
   // battery
@@ -635,39 +906,10 @@ static void main_window_unload(Window *window)
   gbitmap_destroy(battery_bitmap);
 }
 
-static void set_layer_bitmap(GBitmap **bitmap, BitmapLayer *layer, uint32_t resource_id)
-{
-  gbitmap_destroy(*bitmap);
-  *bitmap = gbitmap_create_with_resource(resource_id);
-  bitmap_layer_set_bitmap(layer, *bitmap);
-}
-
-// Draw the temperature (received in Celsius) as sign, two digits and unit.
-static int last_celsius;
-static bool have_temperature = false;
-
 static void show_temperature(int celsius)
 {
   last_celsius = celsius;
   have_temperature = true;
-
-  int temp = celsius;
-  if (settings.UseCelsius == false)
-  {
-    // integer math (no soft-float library); F*10 = C*18 + 320, rounded
-    int f10 = temp * 18 + 320;
-    temp = (f10 >= 0 ? f10 + 5 : f10 - 5) / 10;
-  }
-  // only two digits fit on screen
-  if (temp > 99)
-    temp = 99;
-  if (temp < -99)
-    temp = -99;
-
-  int magnitude = temp < 0 ? -temp : temp;
-  snprintf(temp_text, sizeof(temp_text), "%c%02d°%c",
-           temp < 0 ? '-' : '+', magnitude, settings.UseCelsius ? 'C' : 'F');
-  text_layer_set_text(temp_layer, temp_text);
 }
 
 static void show_conditions(int condition)
@@ -678,7 +920,8 @@ static void show_conditions(int condition)
     APP_LOG(APP_LOG_LEVEL_WARNING, "Unknown weather condition %d", condition);
     return;
   }
-  set_layer_bitmap(&conditions_bitmap, conditions_layer, WEATHER_IDS[condition]);
+  gbitmap_destroy(conditions_bitmap);
+  conditions_bitmap = gbitmap_create_with_resource(WEATHER_IDS[condition]);
 }
 
 // Avoid flash writes when the weather hasn't changed.
@@ -694,6 +937,25 @@ static void restore_weather()
     show_temperature((int)persist_read_int(WEATHER_TEMP_KEY));
   if (persist_exists(WEATHER_COND_KEY))
     show_conditions((int)persist_read_int(WEATHER_COND_KEY));
+  persist_read_data(WEATHER_EXTRA_KEY, &weather_extra, sizeof(weather_extra));
+  refresh_panel();
+}
+
+// Clay sends select values as strings
+static int tuple_int(const Tuple *t)
+{
+  return t->type == TUPLE_CSTRING ? atoi(t->value->cstring) : (int)t->value->int32;
+}
+
+// Read one extra weather field; the phone sends -1000 when it has no value.
+static bool read_weather_field(DictionaryIterator *iter, uint32_t key, int16_t *field)
+{
+  Tuple *t = dict_find(iter, key);
+  if (!t)
+    return false;
+  int value = (int)t->value->int32;
+  *field = value <= -1000 ? NO_VALUE : value;
+  return true;
 }
 
 static void in_received_handler(DictionaryIterator *iter, void *context)
@@ -705,10 +967,22 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
   if (temp_units_t)
   {
     settings.UseCelsius = strcmp(temp_units_t->value->cstring, "c") == 0;
+    settings_changed = true; // the panel redraws in the new unit below
+  }
+
+  bool had_weather = panel_uses_weather();
+  const uint32_t keys[SLOT_COUNT] = {MESSAGE_KEY_Slot1, MESSAGE_KEY_Slot2, MESSAGE_KEY_Slot3, MESSAGE_KEY_Slot4};
+  for (int i = 0; i < SLOT_COUNT; i++)
+  {
+    Tuple *slot_t = dict_find(iter, keys[i]);
+    if (!slot_t)
+      continue;
+    int c = tuple_int(slot_t);
+    // the weather icon only fits the top row
+    if (c < 0 || c >= C_COUNT || (c == C_WEATHER_ICON && i >= 2))
+      continue;
+    settings.Slots[i] = c;
     settings_changed = true;
-    // redraw in the new unit locally; the phone always sends Celsius
-    if (have_temperature)
-      show_temperature(last_celsius);
   }
 
   Tuple *animate_numbers_t = dict_find(iter, MESSAGE_KEY_AnimateNumbers);
@@ -722,10 +996,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
   Tuple *weather_interval_t = dict_find(iter, MESSAGE_KEY_WeatherInterval);
   if (weather_interval_t)
   {
-    // Clay sends select values as strings
-    int minutes = weather_interval_t->type == TUPLE_CSTRING
-                      ? atoi(weather_interval_t->value->cstring)
-                      : (int)weather_interval_t->value->int32;
+    int minutes = tuple_int(weather_interval_t);
     if (minutes == 30 || minutes == 60 || minutes == 120)
     {
       settings.WeatherInterval = minutes;
@@ -794,6 +1065,25 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
     show_conditions((int)conditions_t->value->int32);
     persist_int_if_changed(WEATHER_COND_KEY, conditions_t->value->int32);
   }
+
+  WeatherExtra extra = weather_extra;
+  bool got_extra = read_weather_field(iter, MESSAGE_KEY_TempHigh, &extra.high);
+  got_extra |= read_weather_field(iter, MESSAGE_KEY_TempLow, &extra.low);
+  got_extra |= read_weather_field(iter, MESSAGE_KEY_Humidity, &extra.humidity);
+  got_extra |= read_weather_field(iter, MESSAGE_KEY_RainChance, &extra.rain);
+  got_extra |= read_weather_field(iter, MESSAGE_KEY_Sunrise, &extra.sunrise);
+  got_extra |= read_weather_field(iter, MESSAGE_KEY_Sunset, &extra.sunset);
+  if (got_extra && memcmp(&extra, &weather_extra, sizeof(extra)) != 0)
+  {
+    weather_extra = extra;
+    persist_write_data(WEATHER_EXTRA_KEY, &weather_extra, sizeof(weather_extra));
+  }
+
+  // a spot now shows weather: fetch it instead of waiting for the next update
+  if (!had_weather && panel_uses_weather())
+    update_temp();
+
+  refresh_panel();
 }
 
 static void inbox_dropped_callback(AppMessageResult reason, void *context)
