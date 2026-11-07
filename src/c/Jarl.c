@@ -90,8 +90,8 @@ static BitmapLayer *conditions_layer;
 static GBitmap *conditions_bitmap;
 
 static bool on_animation = false;
-static bool animation_numbers_started = false;
 static bool start = true;
+static bool redraw_all_digits = false; // set when the digit colors change
 
 static int rand_minutes_unit = 0;
 static int rand_minutes_dec = 0;
@@ -240,8 +240,14 @@ void update_temp()
 
 static void update_time_component(/* inout */ struct tc_status* status, char buffer, int number)
 {
+  bool changed = (status->current_char != buffer) || start;
+  // Usually only one digit changes per minute: skip reloading and redrawing
+  // the others (resource load + recolor + redraw cost CPU time and battery).
+  if (!changed && !redraw_all_digits)
+    return;
+
 #ifdef PBL_COLOR
-  if ((status->current_char != buffer) | (start == true))
+  if (changed)
   {
     status->color_idx = rand() % 4;
   }
@@ -249,14 +255,12 @@ static void update_time_component(/* inout */ struct tc_status* status, char buf
   status->bitmap = gbitmap_create_with_resource(NUMBERS_IDS[number]);
   replace_gbitmap_color(GColorWhite, settings.Colors[status->color_idx], status->bitmap, NULL);
   bitmap_layer_set_bitmap(status->layer, status->bitmap);
-
-  status->current_char = buffer;
-
 #else
   gbitmap_destroy(status->bitmap);
   status->bitmap = gbitmap_create_with_resource(NUMBERS_IDS[number]);
   bitmap_layer_set_bitmap(status->layer, status->bitmap);
 #endif
+  status->current_char = buffer;
   layer_mark_dirty(bitmap_layer_get_layer(status->layer));
 }
 
@@ -291,7 +295,7 @@ static void update_time()
   update_time_component(&minutes_unit, buffer[4], m0);
 
   start = false;
-  // APP_LOG(APP_LOG_LEVEL_INFO, "Update");
+  redraw_all_digits = false;
 }
 
 void timer_callback(void *data)
@@ -513,118 +517,118 @@ static void main_window_load(Window *window)
   update_time();
 }
 
-static void tick_segundos(struct tm *tick_time, TimeUnits units_changed)
-{
-  // vibes_short_pulse();
-  // Format the buffer string using tick_time as the time source
-  // APP_LOG(APP_LOG_LEVEL_DEBUG, "(free: %d, used: %d)", heap_bytes_free(), heap_bytes_used());
+// Slide the digits that are about to change off screen. Runs once per minute,
+// at second 59, from an AppTimer (instead of waking up every second).
+static AppTimer *slide_out_timer = NULL;
 
+static void slide_out_callback(void *data)
+{
+  slide_out_timer = NULL;
+  if (!settings.AnimateNumbers || on_animation)
+    return; // disabled, or the date/weather panel is showing
+
+  time_t now = time(NULL);
+  struct tm *tick_time = localtime(&now);
+  // Timer ran late and the minute already rolled over: the digits below would
+  // be computed for the new minute, so skip this slide-out.
+  if (tick_time->tm_sec < 30)
+    return;
+  int minutes = tick_time->tm_min;
+  int hours = tick_time->tm_hour;
+
+  timer3 = app_timer_register(TOTAL_ANIM_DIGIT_DURATION, timer_callback3, NULL);
+  animate_layer(bitmap_layer_get_layer(minutes_unit.layer), &GRect(HOR_OFFSET, VER_OFFSET, HOR_OFFSET, VER_OFFSET), &GRect(WIDTH - rand_minutes_unit * HOR_OFFSET, VER_OFFSET + VER_OFFSET * rand_minutes_unit, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
+
+  if (minutes % 10 == 9)
+  {
+    animate_layer(bitmap_layer_get_layer(minutes_dec.layer), &GRect(X_ORIGIN, VER_OFFSET, HOR_OFFSET, VER_OFFSET), &GRect(-HOR_OFFSET + rand_minutes_dec * HOR_OFFSET, VER_OFFSET + rand_minutes_dec * VER_OFFSET, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
+  }
+  if (minutes == 59)
+  {
+    animate_layer(bitmap_layer_get_layer(hours_unit.layer), &GRect(HOR_OFFSET, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), &GRect(WIDTH - HOR_OFFSET * rand_hours_unit, -VER_OFFSET * rand_hours_unit, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
+    if ((hours == 23) | (hours == 19) | (hours == 9))
+    {
+      animate_layer(bitmap_layer_get_layer(hours_dec.layer), &GRect(X_ORIGIN, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), &GRect(-HOR_OFFSET + rand_hours_dec * HOR_OFFSET, -VER_OFFSET * rand_hours_dec, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
+    }
+  }
+}
+
+// Arm a one-shot timer for one second before the next minute (like the old
+// per-second tick at :59), computed with millisecond precision.
+static void schedule_slide_out(void)
+{
+  if (slide_out_timer)
+  {
+    app_timer_cancel(slide_out_timer);
+    slide_out_timer = NULL;
+  }
+  if (!settings.AnimateNumbers)
+    return;
+  time_t now_s;
+  uint16_t now_ms;
+  time_ms(&now_s, &now_ms);
+  int32_t ms_to_next_minute = (60 - localtime(&now_s)->tm_sec) * 1000 - now_ms;
+  int32_t delay = ms_to_next_minute - 1000;
+  if (delay > 0)
+    slide_out_timer = app_timer_register(delay, slide_out_callback, NULL);
+}
+
+// Slide the new digits back in (same directions as the slide-out at :59).
+static void slide_in(int minutes, int hours)
+{
+  if (!settings.AnimateNumbers || on_animation)
+    return; // disabled, or the date/weather panel is showing
+
+  animate_layer(bitmap_layer_get_layer(minutes_unit.layer), &GRect(WIDTH - rand_minutes_unit * HOR_OFFSET, VER_OFFSET + VER_OFFSET * rand_minutes_unit, HOR_OFFSET, VER_OFFSET), &GRect(HOR_OFFSET, VER_OFFSET, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
+  if (minutes % 10 == 0)
+  {
+    animate_layer(bitmap_layer_get_layer(minutes_dec.layer), &GRect(-HOR_OFFSET + rand_minutes_dec * HOR_OFFSET, VER_OFFSET + rand_minutes_dec * VER_OFFSET, HOR_OFFSET, VER_OFFSET), &GRect(X_ORIGIN, VER_OFFSET, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
+  }
+  if (minutes == 0)
+  {
+    animate_layer(bitmap_layer_get_layer(hours_unit.layer), &GRect(WIDTH - HOR_OFFSET * rand_hours_unit, -VER_OFFSET * rand_hours_unit, HOR_OFFSET, VER_OFFSET), &GRect(HOR_OFFSET, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
+    if ((hours == 0) | (hours == 20) | (hours == 10))
+    {
+      animate_layer(bitmap_layer_get_layer(hours_dec.layer), &GRect(-HOR_OFFSET + rand_hours_dec * HOR_OFFSET, -VER_OFFSET * rand_hours_dec, HOR_OFFSET, VER_OFFSET), &GRect(X_ORIGIN, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
+    }
+  }
+}
+
+// Called once per minute (MINUTE_UNIT) instead of every second.
+static void tick_minutos(struct tm *tick_time, TimeUnits units_changed)
+{
 #ifdef DEBUG_MEMORY
   static char buf[] = "1234512345";
   snprintf(buf, sizeof(buf), "%u %u", heap_bytes_used(), heap_bytes_free());
   text_layer_set_text(memory_layer, buf);
 #endif
 
-  static char buffer[] = "00:00";
-  strftime(buffer, sizeof("00:00"), "%H:%M", tick_time);
-
-  int seconds = tick_time->tm_sec;
   int minutes = tick_time->tm_min;
   int hours = tick_time->tm_hour;
 
-  // a las horas en punto y a y media
-  if ((seconds == 0) && (minutes == 00))
+  // a las horas en punto y a y media: weather and battery
+  if ((minutes == 0) || (minutes == 30))
   {
     update_temp();
-    // actualizamos batería también
     update_battery();
-    //
-  }
-
-  // a las horas en punto y a y media
-  if ((seconds == 0) && (minutes == 30))
-  {
-    update_temp();
-    // actualizamos batería también
-    update_battery();
-    //
   }
 
   // a las cero horas
-  if ((seconds == 0) && (minutes == 0) && (hours == 00))
+  if (units_changed & DAY_UNIT)
   {
     update_date();
   }
 
-  // a mitad de minuto aleatorizamos
-  if (seconds == 30)
-  {
-    rand_minutes_unit = rand() % 2;
-    rand_minutes_dec = rand() % 2;
-    rand_hours_unit = rand() % 2;
-    rand_hours_dec = rand() % 2;
-  }
+  update_time();
+  slide_in(minutes, hours);
 
-  if (seconds == 0)
-    update_time();
-  //  if(seconds == 2) update_time();  // prueba para evitar los blancos
+  // new random directions for the next slide-out / slide-in pair
+  rand_minutes_unit = rand() % 2;
+  rand_minutes_dec = rand() % 2;
+  rand_hours_unit = rand() % 2;
+  rand_hours_dec = rand() % 2;
 
-  if (settings.AnimateNumbers)
-  {
-    // el número sale de la pantalla
-    if (seconds == 59)
-    {
-      // Slide
-      if (on_animation == false)
-      { // no se está mostrando la fecha
-        //  on_animation = true;
-        //  animation_numbers_started =  true;
-        timer3 = app_timer_register(TOTAL_ANIM_DIGIT_DURATION, timer_callback3, NULL);
-        // animate_layer(bitmap_layer_get_layer(minute_layer_unit), &GRect(73, 84, 72, 84), &GRect(144 - rand_minutes_unit * 73, 84 + 84 * rand_minutes_unit, 72, 84), ANIM_DURATION_DIGITS, 0);
-        animate_layer(bitmap_layer_get_layer(minutes_unit.layer), &GRect(HOR_OFFSET, VER_OFFSET, HOR_OFFSET, VER_OFFSET), &GRect(WIDTH - rand_minutes_unit * HOR_OFFSET, VER_OFFSET + VER_OFFSET * rand_minutes_unit, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
-
-        if ((minutes == 9) | (minutes == 19) | (minutes == 29) | (minutes == 39) | (minutes == 49) | (minutes == 59))
-        {
-          animate_layer(bitmap_layer_get_layer(minutes_dec.layer), &GRect(X_ORIGIN, VER_OFFSET, HOR_OFFSET, VER_OFFSET), &GRect(-HOR_OFFSET + rand_minutes_dec * HOR_OFFSET, VER_OFFSET + rand_minutes_dec * VER_OFFSET, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
-        }
-        if (minutes == 59)
-        {
-          animate_layer(bitmap_layer_get_layer(hours_unit.layer), &GRect(HOR_OFFSET, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), &GRect(WIDTH - HOR_OFFSET * rand_hours_unit, -VER_OFFSET * rand_hours_unit, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
-          if ((hours == 23) | (hours == 19) | (hours == 9))
-          {
-            animate_layer(bitmap_layer_get_layer(hours_dec.layer), &GRect(X_ORIGIN, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), &GRect(-HOR_OFFSET + rand_hours_dec * HOR_OFFSET, -VER_OFFSET * rand_hours_dec, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
-          }
-        }
-      }
-    }
-
-    // el número entra
-    if (seconds == 0)
-    {
-      // Slide
-      // update_time();
-      //   if (animation_numbers_started == true){
-      if (on_animation == false)
-      { // no se está mostrando la fecha
-        animate_layer(bitmap_layer_get_layer(minutes_unit.layer), &GRect(WIDTH - rand_minutes_unit * HOR_OFFSET, VER_OFFSET + VER_OFFSET * rand_minutes_unit, HOR_OFFSET, VER_OFFSET), &GRect(HOR_OFFSET, VER_OFFSET, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
-        if ((minutes == 10) | (minutes == 20) | (minutes == 30) | (minutes == 40) | (minutes == 50) | (minutes == 0))
-        {
-          // animate_layer(bitmap_layer_get_layer(minute_layer_dec), &GRect(-73 + rand_minutes_dec * 73,  84 + rand_minutes_dec * 84, 72, 84), &GRect(0, 84 , 72, 84), ANIM_DURATION_DIGITS, 0);
-          animate_layer(bitmap_layer_get_layer(minutes_dec.layer), &GRect(-HOR_OFFSET + rand_minutes_dec * HOR_OFFSET, VER_OFFSET + rand_minutes_dec * VER_OFFSET, HOR_OFFSET, VER_OFFSET), &GRect(X_ORIGIN, VER_OFFSET, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
-        }
-        if (minutes == 0)
-        {
-          animate_layer(bitmap_layer_get_layer(hours_unit.layer), &GRect(WIDTH - HOR_OFFSET * rand_hours_unit, -VER_OFFSET * rand_hours_unit, HOR_OFFSET, VER_OFFSET), &GRect(HOR_OFFSET, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
-          if ((hours == 0) | (hours == 20) | (hours == 10))
-          {
-            animate_layer(bitmap_layer_get_layer(hours_dec.layer), &GRect(-HOR_OFFSET + rand_hours_dec * HOR_OFFSET, -VER_OFFSET * rand_hours_dec, HOR_OFFSET, VER_OFFSET), &GRect(X_ORIGIN, Y_ORIGIN, HOR_OFFSET, VER_OFFSET), ANIM_DURATION_DIGITS, 0);
-          }
-          //  }
-          //  animation_numbers_started=false;
-        }
-      }
-    }
-  }
+  schedule_slide_out();
 }
 
 static void main_window_unload(Window *window)
@@ -674,10 +678,14 @@ static void main_window_unload(Window *window)
 
 static void in_received_handler(DictionaryIterator *iter, void *context)
 {
+  // Only write to flash when settings actually arrived (not on weather updates)
+  bool settings_changed = false;
+
   Tuple *temp_units_t = dict_find(iter, MESSAGE_KEY_TempUnits);
   if (temp_units_t)
   {
     settings.UseCelsius = strcmp(temp_units_t->value->cstring, "c") == 0;
+    settings_changed = true;
     update_temp();
   }
 
@@ -685,18 +693,22 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
   if (animate_numbers_t)
   {
     settings.AnimateNumbers = animate_numbers_t->value->int32 > 0;
+    settings_changed = true;
+    schedule_slide_out();
   }
 
   Tuple *vibrate_on_connect_t = dict_find(iter, MESSAGE_KEY_VibrateOnConnect);
   if (vibrate_on_connect_t)
   {
     settings.VibrateOnConnect = vibrate_on_connect_t->value->int32 > 0;
+    settings_changed = true;
   }
 
   Tuple *vibrate_on_disconnect_t = dict_find(iter, MESSAGE_KEY_VibrateOnDisconnect);
   if (vibrate_on_disconnect_t)
   {
     settings.VibrateOnDisconnect = vibrate_on_disconnect_t->value->int32 > 0;
+    settings_changed = true;
   }
 
   Tuple *color_1_t = dict_find(iter, MESSAGE_KEY_Color1);
@@ -723,7 +735,15 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
     settings.Colors[3] = GColorFromHEX(color_4_t->value->int32);
   }
 
-  persist_write_data(SETTINGS_KEY, &settings, sizeof(settings));
+  if (color_1_t || color_2_t || color_3_t || color_4_t)
+  {
+    settings_changed = true;
+    redraw_all_digits = true; // recolor digits now, not only when they change
+    update_time();
+  }
+
+  if (settings_changed)
+    persist_write_data(SETTINGS_KEY, &settings, sizeof(settings));
 
   Tuple *temperature_t = dict_find(iter, MESSAGE_KEY_Temperature);
   if (temperature_t)
@@ -890,7 +910,9 @@ static void init()
   window_stack_push(s_main_window, true);
 
   // Register with TickTimerService
-  tick_timer_service_subscribe(SECOND_UNIT, tick_segundos);
+  // MINUTE_UNIT: wake once a minute; the :59 slide-out uses a one-shot AppTimer
+  tick_timer_service_subscribe(MINUTE_UNIT, tick_minutos);
+  schedule_slide_out();
 
   // Subscribe to AccelerometerService
   accel_tap_service_subscribe(accel_tap_handler);
@@ -911,6 +933,9 @@ static void init()
 
 static void deinit()
 {
+  tick_timer_service_unsubscribe();
+  if (slide_out_timer)
+    app_timer_cancel(slide_out_timer);
   // Stop any animation in progress
   animation_unschedule_all();
   // Destroy Window
