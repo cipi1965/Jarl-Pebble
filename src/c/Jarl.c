@@ -853,7 +853,9 @@ static void init()
   app_message_register_outbox_failed(outbox_failed_callback);
   app_message_register_outbox_sent(outbox_sent_callback);
 
-  app_message_open(784, 784);
+  // Largest inbox message is the Clay settings dict (~90 bytes); the only
+  // outbox message is a 1-byte weather request.
+  app_message_open(256, 32);
 }
 
 static void deinit()
