@@ -51,16 +51,9 @@ const int BATTERY_RESOURCE_IDS[10] = {
     RESOURCE_ID_IMAGE_BATTERY_70, RESOURCE_ID_IMAGE_BATTERY_80, RESOURCE_ID_IMAGE_BATTERY_90,
     RESOURCE_ID_IMAGE_BATTERY_100};
 
-const int DAYS_IDS[7] = {
-    RESOURCE_ID_IMAGE_MONDAY, RESOURCE_ID_IMAGE_TUESDAY, RESOURCE_ID_IMAGE_WEDNESDAY,
-    RESOURCE_ID_IMAGE_THURSDAY, RESOURCE_ID_IMAGE_FRIDAY, RESOURCE_ID_IMAGE_SATURDAY,
-    RESOURCE_ID_IMAGE_SUNDAY};
-
-const int MININUMBERS_IDS[10] = {
-    RESOURCE_ID_IMAGE_0_MINI, RESOURCE_ID_IMAGE_1_MINI, RESOURCE_ID_IMAGE_2_MINI,
-    RESOURCE_ID_IMAGE_3_MINI, RESOURCE_ID_IMAGE_4_MINI, RESOURCE_ID_IMAGE_5_MINI,
-    RESOURCE_ID_IMAGE_6_MINI, RESOURCE_ID_IMAGE_7_MINI, RESOURCE_ID_IMAGE_8_MINI,
-    RESOURCE_ID_IMAGE_9_MINI};
+// Day names drawn with the Jarl Mini font (fixed English, like the old
+// day bitmaps; not taken from the locale, so only font glyphs are used)
+static const char *const DAY_NAMES[7] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 
 const int NUMBERS_IDS[10] = {
     RESOURCE_ID_NUMBER_0, RESOURCE_ID_NUMBER_1, RESOURCE_ID_NUMBER_2,
@@ -83,13 +76,23 @@ const int WEATHER_IDS[10] = {
 
 static Window *s_main_window;
 
-static GBitmap *bitmap_temp_sign, *bitmap_temp_dec, *bitmap_temp_unit, *bitmap_temp_degrees;
-static BitmapLayer *layer_temp_sign, *layer_temp_dec, *layer_temp_unit, *layer_temp_degrees;
+// Info panel text, drawn with the Jarl Mini pixel font (13x17 glyphs, 2 px gap)
+#define MINI_H 17
+#define TEMP_X (((WIDTH / 2) - 39 - 21 - 6) / 2)
+#define TEMP_W 68 /* "+21°C" incl. the 2 px gap after the last glyph */
+#define DAY_X ((WIDTH / 2 - 43) / 2)
+#define DAY_W 45 /* "MON" + gap */
+#define DAYNUM_X ((WIDTH / 2) + ((WIDTH / 2) - 28) / 2)
+#define DAYNUM_W 30 /* "07" + gap */
+static GFont mini_font;
+static TextLayer *temp_layer, *day_layer, *daynum_layer;
+static char temp_text[10] = "----";
+static char daynum_text[3];
 
 static uint8_t battery_level;
 
-static GBitmap *bitmap_date_day, *bitmap_date_dec, *bitmap_date_unit, *battery_bitmap;
-static BitmapLayer *layer_date_day, *layer_date_dec, *layer_date_unit, *battery_layer;
+static GBitmap *battery_bitmap;
+static BitmapLayer *battery_layer;
 
 static BitmapLayer *conditions_layer;
 static GBitmap *conditions_bitmap;
@@ -190,32 +193,12 @@ static void bluetooth_callback(bool connected)
 
 static void update_date()
 {
-  char bufferday[] = "0";
-  char bufferdayn[] = "01";
-  // Get a tm structure
   time_t temp = time(NULL);
   struct tm *tick_time = localtime(&temp);
 
-  strftime(bufferday, sizeof("0"), "%u", tick_time);
-  strftime(bufferdayn, sizeof("01"), "%d", tick_time);
-
-  // dias de la semana
-  gbitmap_destroy(bitmap_date_day);
-  int i = bufferday[0] - '0';
-  bitmap_date_day = gbitmap_create_with_resource(DAYS_IDS[i - 1]);
-  bitmap_layer_set_bitmap(layer_date_day, bitmap_date_day);
-
-  // cifras del día del mes
-  //  unidad
-  gbitmap_destroy(bitmap_date_unit);
-  int u = bufferdayn[1] - '0';
-  bitmap_date_unit = gbitmap_create_with_resource(MININUMBERS_IDS[u]);
-  bitmap_layer_set_bitmap(layer_date_unit, bitmap_date_unit);
-  // decena
-  gbitmap_destroy(bitmap_date_dec);
-  int d = bufferdayn[0] - '0';
-  bitmap_date_dec = gbitmap_create_with_resource(MININUMBERS_IDS[d]);
-  bitmap_layer_set_bitmap(layer_date_dec, bitmap_date_dec);
+  text_layer_set_text(day_layer, DAY_NAMES[tick_time->tm_wday]);
+  strftime(daynum_text, sizeof(daynum_text), "%d", tick_time);
+  text_layer_set_text(daynum_layer, daynum_text);
 }
 
 static void update_battery()
@@ -316,18 +299,11 @@ static void update_time()
 void timer_callback(void *data)
 {
   // animate temperature
-  int first_temp_symbol_x = ((WIDTH / 2) - 39 - 21 - 6) / 2;
-  animate_layer(bitmap_layer_get_layer(layer_temp_sign), &GRect(first_temp_symbol_x, ANIM_LENGTH - VER_OFFSET + 12, 13, 17), &GRect(first_temp_symbol_x, -VER_OFFSET + 12, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(bitmap_layer_get_layer(layer_temp_dec), &GRect(first_temp_symbol_x + 13 + 2, 12, 13, 17), &GRect(first_temp_symbol_x + 13 + 2, -VER_OFFSET + 12, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(bitmap_layer_get_layer(layer_temp_unit), &GRect(first_temp_symbol_x + 26 + 4, 12, 13, 17), &GRect(first_temp_symbol_x + 26 + 4, -VER_OFFSET + 12, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(bitmap_layer_get_layer(layer_temp_degrees), &GRect(first_temp_symbol_x + 39 + 6, 12, 21, 17), &GRect(first_temp_symbol_x + 39 + 6, -VER_OFFSET + 12, 21, 17), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(text_layer_get_layer(temp_layer), &GRect(TEMP_X, ANIM_LENGTH - VER_OFFSET + 12, TEMP_W, MINI_H), &GRect(TEMP_X, -VER_OFFSET + 12, TEMP_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
 
   // animate date
-  int date_day_x = (WIDTH / 2 - 43) / 2;
-  animate_layer(bitmap_layer_get_layer(layer_date_day), &GRect(date_day_x, ANIM_LENGTH + 6 - 42, 43, 17), &GRect(date_day_x, 6 - 42, 43, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  int first_day_number_x = (WIDTH / 2) + ((WIDTH / 2) - 26) / 2;
-  animate_layer(bitmap_layer_get_layer(layer_date_dec), &GRect(first_day_number_x, ANIM_LENGTH + 6 - 42, 13, 17), &GRect(first_day_number_x, 6 - 42, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
-  animate_layer(bitmap_layer_get_layer(layer_date_unit), &GRect(first_day_number_x + 13 + 1, ANIM_LENGTH + 6 - 42, 13, 17), &GRect(first_day_number_x + 13 + 1, 6 - 42, 13, 17), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(text_layer_get_layer(day_layer), &GRect(DAY_X, ANIM_LENGTH + 6 - 42, DAY_W, MINI_H), &GRect(DAY_X, 6 - 42, DAY_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
+  animate_layer(text_layer_get_layer(daynum_layer), &GRect(DAYNUM_X, ANIM_LENGTH + 6 - 42, DAYNUM_W, MINI_H), &GRect(DAYNUM_X, 6 - 42, DAYNUM_W, MINI_H), ANIM_DURATION_UP, ANIM_DELAY);
 
   // animate battery
   animate_layer(bitmap_layer_get_layer(battery_layer), &GRect((WIDTH - 144) / 2, -10 + ANIM_LENGTH, 144, 6), &GRect((WIDTH - 144) / 2, -10, 144, 6), ANIM_DURATION_UP, ANIM_DELAY);
@@ -358,51 +334,24 @@ static void accel_tap_handler(AccelAxisType axis, int32_t direction)
     on_animation = true;
 
     // animate temperature
-    int first_temp_symbol_x = ((WIDTH / 2) - 39 - 21 - 6) / 2;
     animate_layer(
-      bitmap_layer_get_layer(layer_temp_sign),
-      &GRect(first_temp_symbol_x, -VER_OFFSET + 12, 13, 17),
-      &GRect(first_temp_symbol_x, 12, 13, 17),
-      ANIM_DURATION_DOWN, ANIM_DELAY
-    );
-    animate_layer(
-      bitmap_layer_get_layer(layer_temp_dec),
-      &GRect(first_temp_symbol_x + 13 + 2, -VER_OFFSET + 12, 13, 17),
-      &GRect(first_temp_symbol_x + 13 + 2, 12, 13, 17),
-      ANIM_DURATION_DOWN, ANIM_DELAY
-    );
-    animate_layer(
-      bitmap_layer_get_layer(layer_temp_unit),
-      &GRect(first_temp_symbol_x + 26 + 4, -VER_OFFSET + 12, 13, 17),
-      &GRect(first_temp_symbol_x + 26 + 4, 12, 13, 17),
-      ANIM_DURATION_DOWN, ANIM_DELAY
-    );
-    animate_layer(
-      bitmap_layer_get_layer(layer_temp_degrees),
-      &GRect(first_temp_symbol_x + 39 + 6, -ANIM_LENGTH + 12, 21, 17),
-      &GRect(first_temp_symbol_x + 39 + 6, 12, 21, 17),
+      text_layer_get_layer(temp_layer),
+      &GRect(TEMP_X, -VER_OFFSET + 12, TEMP_W, MINI_H),
+      &GRect(TEMP_X, 12, TEMP_W, MINI_H),
       ANIM_DURATION_DOWN, ANIM_DELAY
     );
 
     // animate date
-    int date_day_x = (WIDTH / 2 - 43) / 2;
     animate_layer(
-      bitmap_layer_get_layer(layer_date_day),
-      &GRect(date_day_x, 6 - 42, 43, 17),
-      &GRect(date_day_x, ANIM_LENGTH + 6 - 42, 43, 17),
-      ANIM_DURATION_DOWN, ANIM_DELAY
-    );
-    int first_day_number_x = (WIDTH / 2) + ((WIDTH / 2) - 26) / 2;
-    animate_layer(
-      bitmap_layer_get_layer(layer_date_dec),
-      &GRect(first_day_number_x, 6 - 42, 13, 17),
-      &GRect(first_day_number_x, ANIM_LENGTH + 6 - 42, 13, 17),
+      text_layer_get_layer(day_layer),
+      &GRect(DAY_X, 6 - 42, DAY_W, MINI_H),
+      &GRect(DAY_X, ANIM_LENGTH + 6 - 42, DAY_W, MINI_H),
       ANIM_DURATION_DOWN, ANIM_DELAY
     );
     animate_layer(
-      bitmap_layer_get_layer(layer_date_unit),
-      &GRect(first_day_number_x + 13 + 1, 6 - 42, 13, 17),
-      &GRect(first_day_number_x + 13 + 1, ANIM_LENGTH + 6 - 42, 13, 17),
+      text_layer_get_layer(daynum_layer),
+      &GRect(DAYNUM_X, 6 - 42, DAYNUM_W, MINI_H),
+      &GRect(DAYNUM_X, ANIM_LENGTH + 6 - 42, DAYNUM_W, MINI_H),
       ANIM_DURATION_DOWN, ANIM_DELAY
     );
 
@@ -443,6 +392,17 @@ void timer_callback3(void *data)
   on_animation = false;
 }
 
+static TextLayer *make_mini_text_layer(Window *window, GRect frame)
+{
+  TextLayer *layer = text_layer_create(frame);
+  text_layer_set_background_color(layer, GColorClear);
+  text_layer_set_text_color(layer, GColorWhite);
+  text_layer_set_font(layer, mini_font);
+  text_layer_set_text_alignment(layer, GTextAlignmentLeft);
+  layer_add_child(window_get_root_layer(window), text_layer_get_layer(layer));
+  return layer;
+}
+
 static void main_window_load(Window *window)
 {
   srand(time(NULL));
@@ -459,33 +419,12 @@ static void main_window_load(Window *window)
   minutes_unit.layer = bitmap_layer_create(GRect(73, 168, 72, 84));
   layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(minutes_unit.layer));
 
-  // Create temperature  layers
-  layer_temp_sign = bitmap_layer_create(GRect(3, -84 + 12, 13, 17));
-  layer_temp_dec = bitmap_layer_create(GRect(18, -84 + 12, 13, 17));
-  layer_temp_unit = bitmap_layer_create(GRect(33, -84 + 12, 13, 17));
-  layer_temp_degrees = bitmap_layer_create(GRect(48, -84 + 12, 21, 17));
-  bitmap_temp_sign = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_MINUS_MINI);
-  bitmap_temp_dec = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_MINUS_MINI);
-  bitmap_temp_unit = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_MINUS_MINI);
-  bitmap_temp_degrees = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_MINUS_MINI);
-  bitmap_layer_set_bitmap(layer_temp_sign, bitmap_temp_sign);
-  bitmap_layer_set_bitmap(layer_temp_dec, bitmap_temp_dec);
-  bitmap_layer_set_bitmap(layer_temp_unit, bitmap_temp_unit);
-  bitmap_layer_set_bitmap(layer_temp_degrees, bitmap_temp_degrees);
-
-  layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(layer_temp_sign));
-  layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(layer_temp_dec));
-  layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(layer_temp_unit));
-  layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(layer_temp_degrees));
-
-  // Create date layers
-  layer_date_day = bitmap_layer_create(GRect(25, 6 - 42, 43, 17));
-  layer_date_dec = bitmap_layer_create(GRect(91, 6 - 42, 13, 17));
-  layer_date_unit = bitmap_layer_create(GRect(105, 6 - 42, 13, 17));
-
-  layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(layer_date_day));
-  layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(layer_date_dec));
-  layer_add_child(window_get_root_layer(window), bitmap_layer_get_layer(layer_date_unit));
+  // Info panel text (hidden above the screen until the panel slides in)
+  mini_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_JARL_MINI_17));
+  temp_layer = make_mini_text_layer(window, GRect(TEMP_X, -VER_OFFSET + 12, TEMP_W, MINI_H));
+  text_layer_set_text(temp_layer, temp_text);
+  day_layer = make_mini_text_layer(window, GRect(DAY_X, 6 - 42, DAY_W, MINI_H));
+  daynum_layer = make_mini_text_layer(window, GRect(DAYNUM_X, 6 - 42, DAYNUM_W, MINI_H));
 
   // create battery layers
   battery_layer = bitmap_layer_create(GRect(0, -10, 144, 6));
@@ -668,33 +607,18 @@ static void main_window_unload(Window *window)
   gbitmap_destroy(conditions_bitmap);
   bitmap_layer_destroy(conditions_layer);
 
-  // Destroy temperature layers
-  bitmap_layer_destroy(layer_temp_sign);
-  bitmap_layer_destroy(layer_temp_dec);
-  bitmap_layer_destroy(layer_temp_unit);
-  bitmap_layer_destroy(layer_temp_degrees);
-
-  // Destroy tempeatura bitmaps
-  gbitmap_destroy(bitmap_temp_sign);
-  gbitmap_destroy(bitmap_temp_dec);
-  gbitmap_destroy(bitmap_temp_unit);
-  gbitmap_destroy(bitmap_temp_degrees);
-
-  // Destroy date bitmaps
-  gbitmap_destroy(bitmap_date_day);
-  gbitmap_destroy(bitmap_date_dec);
-  gbitmap_destroy(bitmap_date_unit);
-  // Destroy date layers
-  bitmap_layer_destroy(layer_date_day);
-  bitmap_layer_destroy(layer_date_dec);
-  bitmap_layer_destroy(layer_date_unit);
+  // Destroy info panel text
+  text_layer_destroy(temp_layer);
+  text_layer_destroy(day_layer);
+  text_layer_destroy(daynum_layer);
+  fonts_unload_custom_font(mini_font);
 
   // battery
   bitmap_layer_destroy(battery_layer);
   gbitmap_destroy(battery_bitmap);
 }
 
-static void set_mini_bitmap(GBitmap **bitmap, BitmapLayer *layer, uint32_t resource_id)
+static void set_layer_bitmap(GBitmap **bitmap, BitmapLayer *layer, uint32_t resource_id)
 {
   gbitmap_destroy(*bitmap);
   *bitmap = gbitmap_create_with_resource(resource_id);
@@ -724,12 +648,9 @@ static void show_temperature(int celsius)
     temp = -99;
 
   int magnitude = temp < 0 ? -temp : temp;
-  set_mini_bitmap(&bitmap_temp_sign, layer_temp_sign,
-                  temp < 0 ? RESOURCE_ID_IMAGE_MINUS_MINI : RESOURCE_ID_IMAGE_PLUS_MINI);
-  set_mini_bitmap(&bitmap_temp_dec, layer_temp_dec, MININUMBERS_IDS[magnitude / 10]);
-  set_mini_bitmap(&bitmap_temp_unit, layer_temp_unit, MININUMBERS_IDS[magnitude % 10]);
-  set_mini_bitmap(&bitmap_temp_degrees, layer_temp_degrees,
-                  settings.UseCelsius ? RESOURCE_ID_IMAGE_C_MINI : RESOURCE_ID_IMAGE_F_MINI);
+  snprintf(temp_text, sizeof(temp_text), "%c%02d°%c",
+           temp < 0 ? '-' : '+', magnitude, settings.UseCelsius ? 'C' : 'F');
+  text_layer_set_text(temp_layer, temp_text);
 }
 
 static void show_conditions(int condition)
@@ -740,7 +661,7 @@ static void show_conditions(int condition)
     APP_LOG(APP_LOG_LEVEL_WARNING, "Unknown weather condition %d", condition);
     return;
   }
-  set_mini_bitmap(&conditions_bitmap, conditions_layer, WEATHER_IDS[condition]);
+  set_layer_bitmap(&conditions_bitmap, conditions_layer, WEATHER_IDS[condition]);
 }
 
 // Avoid flash writes when the weather hasn't changed.

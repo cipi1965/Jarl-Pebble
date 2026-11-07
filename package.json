@@ -49,23 +49,8 @@
           "type": "bitmap"
         },
         {
-          "file": "images/wednesday.png",
-          "name": "IMAGE_WEDNESDAY",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/sunday.png",
-          "name": "IMAGE_SUNDAY",
-          "type": "bitmap"
-        },
-        {
           "file": "images/snow.png",
           "name": "IMAGE_W_SNOW",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/saturday.png",
-          "name": "IMAGE_SATURDAY",
           "type": "bitmap"
         },
         {
@@ -84,33 +69,13 @@
           "type": "bitmap"
         },
         {
-          "file": "images/monday.png",
-          "name": "IMAGE_MONDAY",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/friday.png",
-          "name": "IMAGE_FRIDAY",
-          "type": "bitmap"
-        },
-        {
           "file": "images/fog.png",
           "name": "IMAGE_W_FOG",
           "type": "bitmap"
         },
         {
-          "file": "images/f_mini.png",
-          "name": "IMAGE_F_MINI",
-          "type": "bitmap"
-        },
-        {
           "file": "images/drizzle.png",
           "name": "IMAGE_W_DRIZZLE",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/c_mini.png",
-          "name": "IMAGE_C_MINI",
           "type": "bitmap"
         },
         {
@@ -131,16 +96,6 @@
         {
           "file": "images/battery_40.png",
           "name": "IMAGE_BATTERY_40",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/tuesday.png",
-          "name": "IMAGE_TUESDAY",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/thursday.png",
-          "name": "IMAGE_THURSDAY",
           "type": "bitmap"
         },
         {
@@ -166,31 +121,6 @@
         {
           "file": "images/battery_100.png",
           "name": "IMAGE_BATTERY_100",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/9_mini.png",
-          "name": "IMAGE_9_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/minus_mini.png",
-          "name": "IMAGE_MINUS_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/8_mini.png",
-          "name": "IMAGE_8_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/7_mini.png",
-          "name": "IMAGE_7_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/plus_mini.png",
-          "name": "IMAGE_PLUS_MINI",
           "type": "bitmap"
         },
         {
@@ -221,41 +151,6 @@
         {
           "file": "images/battery_70.png",
           "name": "IMAGE_BATTERY_70",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/6_mini.png",
-          "name": "IMAGE_6_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/5_mini.png",
-          "name": "IMAGE_5_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/4_mini.png",
-          "name": "IMAGE_4_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/3_mini.png",
-          "name": "IMAGE_3_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/2_mini.png",
-          "name": "IMAGE_2_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/1_mini.png",
-          "name": "IMAGE_1_MINI",
-          "type": "bitmap"
-        },
-        {
-          "file": "images/0_mini.png",
-          "name": "IMAGE_0_MINI",
           "type": "bitmap"
         },
         {
@@ -307,6 +202,11 @@
           "file": "images/0.png",
           "name": "NUMBER_0",
           "type": "bitmap"
+        },
+        {
+          "type": "font",
+          "name": "FONT_JARL_MINI_17",
+          "file": "fonts/jarl_mini.ttf"
         }
       ]
     },
