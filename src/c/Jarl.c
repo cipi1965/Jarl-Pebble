@@ -750,7 +750,9 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
     int temp = (int)temperature_t->value->int32;
     if (settings.UseCelsius == false)
     {
-      temp = (1.8 * temp) + 32;
+      // integer math (no soft-float library); F*10 = C*18 + 320, rounded
+      int f10 = temp * 18 + 320;
+      temp = (f10 >= 0 ? f10 + 5 : f10 - 5) / 10;
     }
 
     snprintf(temperature_buffer, sizeof(temperature_buffer), "%+03d", temp);
