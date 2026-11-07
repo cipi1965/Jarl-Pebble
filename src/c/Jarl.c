@@ -711,6 +711,17 @@ static void show_temperature(int celsius)
                   settings.UseCelsius ? RESOURCE_ID_IMAGE_C_MINI : RESOURCE_ID_IMAGE_F_MINI);
 }
 
+static void show_conditions(int condition)
+{
+  // ignore codes we have no icon for instead of reading past WEATHER_IDS
+  if (condition < 0 || condition >= (int)ARRAY_LENGTH(WEATHER_IDS))
+  {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "Unknown weather condition %d", condition);
+    return;
+  }
+  set_mini_bitmap(&conditions_bitmap, conditions_layer, WEATHER_IDS[condition]);
+}
+
 static void in_received_handler(DictionaryIterator *iter, void *context)
 {
   // Only write to flash when settings actually arrived (not on weather updates)
@@ -789,11 +800,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context)
   Tuple *conditions_t = dict_find(iter, MESSAGE_KEY_Conditions);
   if (conditions_t)
   {
-    int32_t condition = conditions_t->value->int32;
-
-    gbitmap_destroy(conditions_bitmap);
-    conditions_bitmap = gbitmap_create_with_resource(WEATHER_IDS[condition]);
-    bitmap_layer_set_bitmap(conditions_layer, conditions_bitmap);
+    show_conditions((int)conditions_t->value->int32);
   }
 }
 
