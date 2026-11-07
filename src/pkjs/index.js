@@ -6,12 +6,13 @@ var clayConfig = require('./config');
 var clay = new Clay(clayConfig);
 
 
-// Listen for when an AppMessage is received
+// The watch asks for weather on its schedule (and when units change).
+// Anything fetched in the last 10 minutes is reused, which absorbs bursts.
 Pebble.addEventListener('appmessage',
   function(e) {
     console.log("AppMessage received!");
-		getWeather();
-  }                     
+    getWeather(10 * 60 * 1000);
+  }
 );
 
 var xhrRequest = function (url, type, callback) {
@@ -41,6 +42,30 @@ function weatherCodeToCondition(code, is_day) {
   return 0;
 }
 
+var WEATHER_CACHE_KEY = 'weather';
+
+function sendWeather(weather) {
+  Pebble.sendAppMessage({
+      "Temperature": weather.temperature,
+      "Conditions": weather.conditions
+    },
+    function(e) {
+      console.log("Weather info sent to Pebble successfully!");
+    },
+    function(e) {
+      console.log("Error sending weather info to Pebble!");
+    }
+  );
+}
+
+function cachedWeather() {
+  try {
+    return JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY));
+  } catch (err) {
+    return null;
+  }
+}
+
 function locationSuccess(pos) {
   // Construct URL
 
@@ -54,23 +79,15 @@ function locationSuccess(pos) {
       // responseText contains a JSON object with weather info
       var json = JSON.parse(responseText);
 
-      var conditions = weatherCodeToCondition(json.current.weather_code, json.current.is_day);
-			
-      // Assemble dictionary using our keys
-      var dictionary = {
-          "Temperature": json.current.temperature_2m,
-          "Conditions": conditions
+      var weather = {
+        temperature: Math.round(json.current.temperature_2m),
+        conditions: weatherCodeToCondition(json.current.weather_code, json.current.is_day),
+        time: Date.now()
       };
-
-      // Send to Pebble
-      Pebble.sendAppMessage(dictionary,
-        function(e) {
-            console.log("Weather info sent to Pebble successfully!");
-        },
-        function(e) {
-            console.log("Error sending weather info to Pebble!");
-        }
-      );
+      try {
+        localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(weather));
+      } catch (err) {}
+      sendWeather(weather);
     }      
   );
 }
@@ -79,7 +96,14 @@ function locationError(err) {
   console.log("Error requesting location!");
 }
 
-function getWeather() {
+// Send cached weather if it is younger than maxAgeMs, otherwise fetch it.
+function getWeather(maxAgeMs) {
+  var cached = cachedWeather();
+  if (cached && Date.now() - cached.time < maxAgeMs) {
+    console.log("Using cached weather");
+    sendWeather(cached);
+    return;
+  }
   navigator.geolocation.getCurrentPosition(
     locationSuccess,
     locationError,
@@ -94,7 +118,8 @@ Pebble.addEventListener('ready',
   function(e) {
     console.log("PebbleKit JS ready!");
 
-    // Get the initial weather
-    getWeather();
+    // The watchface restarts after every notification or app, so reuse
+    // weather fetched in the last 30 minutes instead of fetching again.
+    getWeather(30 * 60 * 1000);
   }
 );
